@@ -1,0 +1,264 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f7f6f2">
+  <title>Organiza+ · Tu evento, en orden</title>
+  <link rel="stylesheet" href="styles.css">
+  <script src="app.js" defer></script>
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar" aria-label="Navegación principal">
+      <a class="brand" href="#" aria-label="Organiza+, inicio">
+        <span class="brand-mark">o<span>+</span></span>
+        <span>organiza<span class="brand-plus">+</span></span>
+      </a>
+
+      <div class="workspace-label">TU ESPACIO</div>
+      <nav class="main-nav">
+        <button class="nav-link" data-tab="events"><span class="nav-icon">▦</span> Mis eventos <span class="nav-count">3</span></button>
+        <button class="nav-link" data-tab="inbox"><span class="nav-icon">♧</span> Notificaciones <span class="notification-dot"></span></button>
+      </nav>
+
+      <div class="workspace-label event-label">ESTE EVENTO</div>
+      <nav class="event-nav">
+        <button class="nav-link active" data-tab="overview"><span class="nav-icon">⌂</span> Resumen</button>
+        <button class="nav-link" data-tab="attendees"><span class="nav-icon">♙</span> Asistentes <span class="nav-count" id="nav-attendee-count">12</span></button>
+        <button class="nav-link" data-tab="tasks"><span class="nav-icon">☷</span> Qué llevar <span class="nav-count" id="nav-task-count">8</span></button>
+        <button class="nav-link" data-tab="expenses"><span class="nav-icon">€</span> Gastos</button>
+      </nav>
+
+      <div class="sidebar-bottom">
+        <div class="help-card">
+          <div class="help-spark">✳</div>
+          <strong>Un plan entre todos</strong>
+          <p>Organizarlo juntos es más fácil.</p>
+          <button class="text-button" data-tab="tasks">Ver cómo funciona <span>→</span></button>
+        </div>
+        <button class="profile-button">
+          <span class="avatar avatar-me">D</span>
+          <span class="profile-copy"><strong>Diego Navarro</strong><small>Organizador</small></span>
+          <span class="profile-more">···</span>
+        </button>
+      </div>
+    </aside>
+
+    <main class="main-content">
+      <header class="topbar">
+        <div class="breadcrumbs"><span>Mis eventos</span><span class="crumb-separator">/</span><strong>Barbacoa en casa de Juan</strong></div>
+        <div class="topbar-actions">
+          <button class="icon-button notification-button" aria-label="Notificaciones">♧<span></span></button>
+            <button class="secondary-button" id="create-event-button">＋ Crear evento</button>
+          <button class="share-button" id="share-button"><span>↗</span> Compartir invitación</button>
+        </div>
+      </header>
+
+      <div class="page-wrap">
+          <section class="event-gallery" id="event-gallery" aria-label="Selecciona un evento"></section>
+
+        <div class="event-hero">
+          <div class="hero-image" aria-label="Ilustración de una barbacoa">
+            <div class="sun-shape"></div>
+            <div class="hero-sticker">PLANAZO<br><span>EN MARCHA</span></div>
+            <div class="hero-art">
+              <span class="art-smoke smoke-one"></span><span class="art-smoke smoke-two"></span>
+              <span class="art-grill"><i></i><i></i><i></i><i></i><i></i></span>
+              <span class="art-flame">♨</span>
+              <span class="art-leaf leaf-one">✦</span><span class="art-leaf leaf-two">✦</span>
+            </div>
+          </div>
+          <div class="hero-content">
+            <div class="event-kicker"><span class="kicker-dot"></span> EVENTO PRIVADO <span class="kicker-separator">·</span> BARBACOA</div>
+            <div class="hero-title-row">
+              <div>
+                <h1>Barbacoa en<br class="mobile-break"> casa de Juan</h1>
+                <p class="hero-description">Un día de brasas, buena comida y mejor compañía.</p>
+              </div>
+              <button class="more-button" aria-label="Más opciones">···</button>
+            </div>
+            <div class="event-meta">
+              <div class="meta-item"><span class="meta-icon">▦</span><span><strong>Sábado, 21 de junio</strong><small>14:00 h · Quedan 12 días</small></span></div>
+              <div class="meta-item"><span class="meta-icon pin-icon">⌖</span><span><strong>Casa de Juan</strong><small>Alcalá de Guadaíra <a href="#" class="map-link">Ver mapa ↗</a></small></span></div>
+            </div>
+            <div class="hero-footer">
+              <div class="avatar-stack" id="avatar-stack" aria-label="Asistentes confirmados">
+                <span class="avatar avatar-a">M</span><span class="avatar avatar-b">J</span><span class="avatar avatar-c">A</span><span class="avatar avatar-d">L</span>
+                <span class="avatar avatar-extra">+8</span>
+              </div>
+              <span class="attendee-summary"><strong id="hero-attendee-count">12</strong> <span id="hero-attendee-label">confirmados</span> <span>·</span> <span id="pending-count">3</span> <span id="pending-label">pendientes</span></span>
+              <button class="confirm-button confirmed" id="confirm-button"><span>✓</span> <span id="confirm-button-text">Asistencia confirmada</span></button>
+            </div>
+          </div>
+        </div>
+
+        <section class="event-status" aria-label="Estado de organización">
+          <div class="status-heading">
+            <div><span class="section-eyebrow">TODO BAJO CONTROL</span><h2>El plan va tomando forma <span class="sparkle">✳</span></h2></div>
+            <button class="quiet-button" data-tab="overview">Ver resumen <span>→</span></button>
+          </div>
+          <div class="status-grid">
+            <button class="status-card" data-tab="attendees">
+              <span class="status-icon people-icon">♙</span>
+              <span class="status-card-copy"><small>ASISTENCIA</small><strong><span id="status-attendee-count">12</span> <span id="status-attendee-label">personas</span></strong><span class="status-note"><span class="green-dot"></span> <span id="status-pending-count">3</span> por confirmar</span></span>
+              <span class="status-arrow">↗</span>
+            </button>
+            <button class="status-card" data-tab="tasks">
+              <span class="status-icon list-icon">☷</span>
+              <span class="status-card-copy"><small>LISTA DE COSAS</small><strong><span id="task-progress">5 de 8</span> asignadas</strong><span class="status-note"><span class="orange-dot"></span> <span id="status-unassigned-count">3</span> por cubrir</span></span>
+              <span class="status-arrow">↗</span>
+            </button>
+            <button class="status-card" data-tab="expenses">
+              <span class="status-icon money-icon">€</span>
+              <span class="status-card-copy"><small>GASTOS DEL EVENTO</small><strong id="total-expenses">125,00 €</strong><span class="status-note"><span id="ticket-count">2</span> tickets añadidos</span></span>
+              <span class="status-arrow">↗</span>
+            </button>
+          </div>
+        </section>
+
+        <div class="content-grid">
+          <section class="panel plan-panel" id="plan-panel">
+            <div class="panel-heading">
+              <div><span class="section-eyebrow">ORGANIZACIÓN</span><h2>El plan del día</h2></div>
+              <button class="panel-link" data-tab="tasks">Ver todo <span>→</span></button>
+            </div>
+            <div class="task-preview" id="task-preview"></div>
+            <button class="add-inline-button" id="open-task-modal"><span>＋</span> Añadir algo a la lista</button>
+          </section>
+
+          <section class="panel date-panel">
+            <div class="panel-heading">
+              <div><span class="section-eyebrow">DECISIÓN DEL GRUPO</span><h2>¿Qué día nos viene mejor?</h2></div>
+              <span class="vote-tag">VOTACIÓN</span>
+            </div>
+            <p class="panel-subtitle">Vota por tu opción favorita. ¡Ya casi hay fecha!</p>
+            <div class="date-options" id="date-options"></div>
+            <div class="vote-footer"><span id="vote-message">16 de 18 personas han votado</span><button id="add-vote-button">Votar <span>→</span></button></div>
+          </section>
+        </div>
+
+        <section class="panel attendees-panel">
+          <div class="panel-heading">
+            <div><span class="section-eyebrow">EL GRUPO</span><h2>La buena compañía <span class="attendee-title-count" id="attendee-title-count">12</span></h2></div>
+            <button class="panel-link" data-tab="attendees">Ver asistentes <span>→</span></button>
+          </div>
+          <div class="attendee-strip" id="attendee-strip"></div>
+        </section>
+
+        <div class="tab-view hidden" id="attendees-view">
+          <div class="tab-header"><div><span class="section-eyebrow">EL GRUPO</span><h2>Asistentes</h2><p>Que nadie se quede sin confirmar.</p></div><button class="primary-button" id="invite-button">＋ Invitar personas</button></div>
+          <div class="attendee-list panel" id="attendee-list"></div>
+        </div>
+
+        <div class="tab-view hidden" id="tasks-view">
+          <div class="tab-header"><div><span class="section-eyebrow">ORGANIZACIÓN</span><h2>Qué llevar</h2><p>Todos ponen un poquito y sale un planazo.</p></div><button class="primary-button" id="open-task-modal-secondary">＋ Añadir a la lista</button></div>
+          <div class="task-board panel" id="task-board"></div>
+        </div>
+
+        <div class="tab-view hidden" id="expenses-view">
+          <div class="tab-header"><div><span class="section-eyebrow">CUENTAS CLARAS</span><h2>Gastos del evento</h2><p>Repartimos el gasto entre quienes vienen.</p></div><button class="primary-button" id="open-expense-modal">＋ Añadir ticket</button></div>
+          <div class="expense-summary-grid">
+            <div class="expense-total-card"><span>GASTO TOTAL</span><strong id="expense-total-large">125,00 €</strong><small>Repartido entre <b id="split-count">12</b> personas</small></div>
+            <div class="expense-total-card share-total"><span>POR PERSONA</span><strong id="per-person-total">10,42 €</strong><small>Al añadir un ticket, se actualiza al momento</small></div>
+          </div>
+          <div class="panel expense-panel"><div class="panel-heading"><div><span class="section-eyebrow">TICKETS</span><h2>Compras del grupo</h2></div></div><div id="expense-list"></div></div>
+          <div class="panel balances-panel"><div class="panel-heading"><div><span class="section-eyebrow">REPARTO EQUITATIVO</span><h2>Balance por persona</h2></div></div><div id="balances-list"></div></div>
+        </div>
+
+        <footer class="page-footer"><span>Hecho para disfrutar más y organizar menos <span class="footer-heart">♥</span></span><span>ORGANIZA+ <span>·</span> DEMO</span></footer>
+      </div>
+    </main>
+  </div>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <dialog class="app-modal" id="task-modal">
+    <form method="dialog" class="modal-form" id="task-form">
+      <button class="modal-close" type="button" aria-label="Cerrar">×</button>
+      <span class="section-eyebrow">LISTA COMPARTIDA</span>
+      <h2>¿Qué hace falta?</h2>
+      <p>Añade algo que no puede faltar en el plan.</p>
+      <label for="task-name">¿Qué hay que llevar?</label><input id="task-name" name="name" placeholder="Ej. Hielo" required maxlength="50">
+      <div class="form-row"><div><label for="task-quantity">Cantidad</label><input id="task-quantity" name="quantity" placeholder="Ej. 2 bolsas" maxlength="30"></div><div><label for="task-person">¿Quién se encarga?</label><select id="task-person" name="person"></select></div></div>
+      <button class="primary-button modal-submit" type="submit">Añadir a la lista <span>→</span></button>
+    </form>
+  </dialog>
+
+  <dialog class="app-modal" id="expense-modal">
+    <form method="dialog" class="modal-form" id="expense-form">
+      <button class="modal-close" type="button" aria-label="Cerrar">×</button>
+      <span class="section-eyebrow">GASTOS DEL EVENTO</span>
+      <h2>Añadir un ticket</h2>
+      <p>Apunta una compra y las cuentas se actualizan solas.</p>
+      <label for="expense-name">¿Qué has comprado?</label><input id="expense-name" name="name" placeholder="Ej. Carne y carbón" required maxlength="60">
+      <div class="form-row"><div><label for="expense-amount">Importe (€)</label><input id="expense-amount" name="amount" type="number" placeholder="0,00" min="0.01" step="0.01" required></div><div><label for="expense-person">¿Quién lo pagó?</label><select id="expense-person" name="person"></select></div></div>
+      <button class="primary-button modal-submit" type="submit">Guardar ticket <span>→</span></button>
+    </form>
+  </dialog>
+
+  <dialog class="app-modal" id="event-modal">
+    <form method="dialog" class="modal-form" id="event-form">
+      <button class="modal-close" type="button" aria-label="Cerrar">×</button>
+      <div class="wizard-heading"><span class="section-eyebrow">NUEVO EVENTO</span><h2 id="wizard-title">Empecemos por el plan</h2><p id="wizard-description">Cuéntanos qué vas a organizar.</p></div>
+      <div class="wizard-progress" aria-label="Pasos para crear el evento">
+        <div class="wizard-step-indicator active" data-step-indicator="0"><span>1</span><small>Evento</small></div>
+        <i></i><div class="wizard-step-indicator" data-step-indicator="1"><span>2</span><small>Invitar</small></div>
+        <i></i><div class="wizard-step-indicator" data-step-indicator="2"><span>3</span><small>Fechas</small></div>
+        <i></i><div class="wizard-step-indicator" data-step-indicator="3"><span>4</span><small>Qué llevar</small></div>
+      </div>
+
+      <section class="wizard-panel" data-wizard-panel="0">
+        <label for="event-name">Nombre del evento</label><input id="event-name" name="name" placeholder="Ej. Picnic familiar" required maxlength="60">
+        <div class="form-row">
+          <div><label for="event-type">Tipo de evento</label><select id="event-type" name="type"><option>Barbacoa</option><option>Cumpleaños</option><option>Comida de empresa</option><option>Viaje</option><option>Reunión familiar</option><option>Otro</option></select></div>
+          <div><label for="event-guests">Máximo de asistentes</label><input id="event-guests" name="guests" type="number" min="2" max="200" value="20"></div>
+        </div>
+        <label for="event-description">Descripción <span class="optional-label">Opcional</span></label><textarea id="event-description" name="description" rows="2" maxlength="160" placeholder="¿Qué plan tienes en mente?"></textarea>
+        <label for="event-location">Lugar o punto de encuentro</label><input id="event-location" name="location" placeholder="Ej. Casa de Juan" required maxlength="80">
+        <label class="checkbox-label"><input id="event-allow-guests" name="allowGuests" type="checkbox" checked> Los invitados pueden traer acompañantes</label>
+      </section>
+
+      <section class="wizard-panel hidden" data-wizard-panel="1">
+        <label for="invite-emails">Correo electrónico de tus invitados</label>
+        <p class="wizard-hint">Añade uno o varios correos separados por comas o espacios.</p>
+        <div class="invite-entry-row"><input id="invite-emails" type="text" placeholder="ana@email.com, luis@email.com" autocomplete="off"><button type="button" class="secondary-button" id="add-wizard-invite">Añadir</button></div>
+        <div class="invite-chip-list" id="wizard-invite-list"><span class="empty-hint">Todavía no has añadido a nadie.</span></div>
+        <div class="wizard-note"><span>✳</span> Tus invitados podrán confirmar asistencia y apuntarse a las tareas cuando compartas el enlace.</div>
+      </section>
+
+      <section class="wizard-panel hidden" data-wizard-panel="2">
+        <p class="wizard-hint">Propón varias opciones. También podrás votar por la que mejor te venga.</p>
+        <div class="wizard-date-list" id="wizard-date-list"></div>
+        <button type="button" class="add-wizard-row" id="add-wizard-date">＋ Añadir otra fecha</button>
+        <div class="wizard-vote-choice" id="wizard-vote-choice"></div>
+      </section>
+
+      <section class="wizard-panel hidden" data-wizard-panel="3">
+        <p class="wizard-hint">Añade lo que haga falta y asígnalo a alguien. Las tareas se pueden completar más tarde.</p>
+        <div class="wizard-task-list" id="wizard-task-list"></div>
+        <button type="button" class="add-wizard-row" id="add-wizard-task">＋ Añadir otra cosa</button>
+        <div class="wizard-note"><span>✓</span> Tu lista quedará compartida con el grupo.</div>
+      </section>
+
+      <div class="wizard-footer">
+        <button class="secondary-button" type="button" id="wizard-back">← Atrás</button>
+        <span class="wizard-step-caption" id="wizard-step-caption">Paso 1 de 4</span>
+        <button class="primary-button" type="button" id="wizard-next">Continuar <span>→</span></button>
+        <button class="primary-button hidden" type="button" id="wizard-finish">Crear evento <span>✓</span></button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog class="app-modal invite-modal" id="invite-modal">
+    <form method="dialog" class="modal-form">
+      <button class="modal-close" type="button" aria-label="Cerrar">×</button>
+      <span class="section-eyebrow">CUANTOS MÁS, MEJOR</span>
+      <h2>Invita al grupo</h2>
+      <p>Comparte este enlace con quien quieras que se apunte.</p>
+      <div class="invite-link-box"><span id="invite-link">organiza.app/e/barbacoa-juan</span><button type="button" id="copy-invite-button">Copiar</button></div>
+      <button class="primary-button modal-submit" id="native-share-button" type="button">Compartir invitación <span>↗</span></button>
+    </form>
+  </dialog>
+</body>
+</html>
