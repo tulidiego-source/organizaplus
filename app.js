@@ -1,4 +1,4 @@
-const eventTemplates = [
+let eventTemplates = [
   {
     id: 'barbacoa',
     name: 'Barbacoa en casa de Juan',
@@ -80,6 +80,72 @@ let wizardStep = 0;
 let wizardInvitees = [];
 let wizardDates = [];
 let wizardTasks = [];
+const storageKey = 'organiza-plus.data.v1';
+let activeInviteToken = '';
+let inviteRefreshInProgress = false;
+
+async function requestApi(route, options = {}) {
+  let response;
+  try {
+    response = await fetch(route, {
+      ...options,
+      headers: {
+        ...(options.headers || {}),
+        ...(options.body ? { 'Content-Type': 'application/json' } : {})
+      }
+    });
+  } catch (error) {
+    throw new Error('No se pudo conectar con el servidor de invitaciones. Comprueba que la aplicación esté publicada y vuelve a intentarlo.');
+  }
+
+  let result;
+  try {
+    result = await response.json();
+  } catch (error) {
+    throw new Error('El servidor de invitaciones devolvió una respuesta no válida.');
+  }
+  if (!response.ok) throw new Error(result.error || 'No se pudo completar la solicitud.');
+  return result;
+}
+
+function cloneData(value) {
+  return JSON.parse(JSON.stringify(value));
+}
+
+function addDaysToDate(dateValue, days) {
+  const date = new Date(`${dateValue}T12:00:00`);
+  date.setDate(date.getDate() + days);
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+}
+
+function createEmptyEventState(event) {
+  const organizer = { name: 'Diego Navarro', initial: 'D', role: 'Organizador', status: 'Confirmado', color: '#e9c3aa' };
+  return {
+    attendees: [organizer],
+    tasks: [],
+    expenses: [],
+    dateOptions: [
+      { date: event.date, time: event.time || '14:00', votes: 0 },
+      { date: addDaysToDate(event.date, 7), time: event.time || '14:00', votes: 0 }
+    ],
+    selectedDate: '',
+    currentVote: ''
+  };
+}
+
+let eventStates = {};
+eventTemplates.forEach((event, index) => {
+  eventStates[event.id] = index === 0
+    ? {
+        attendees: cloneData(attendees),
+        tasks: cloneData(tasks),
+        expenses: cloneData(expenses),
+        dateOptions: cloneData(dateOptions),
+        selectedDate,
+        currentVote
+      }
+    : createEmptyEventState(event);
+});
 
 const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => Array.from(root.querySelectorAll(selector));
@@ -91,6 +157,221 @@ function showToast(message) {
   toast.classList.add('show');
   window.clearTimeout(toastTimer);
   toastTimer = window.setTimeout(() => toast.classList.remove('show'), 2600);
+}
+
+function validDate(value) {
+  return typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value) && !Number.isNaN(new Date(`${value}T12:00:00`).getTime());
+}
+
+function isValidEventState(state) {
+  return state
+    && Array.isArray(state.attendees)
+    && state.attendees.every(person => person
+      && typeof person.name === 'string'
+      && typeof person.initial === 'string'
+      && typeof person.role === 'string'
+      && ['Confirmado', 'Confirmada', 'Pendiente'].includes(person.status)
+      && typeof person.color === 'string'
+      && /^#[\da-f]{6}$/i.test(person.color))
+    && Array.isArray(state.tasks)
+    && state.tasks.every(task => task
+      && typeof task.name === 'string'
+      && typeof task.quantity === 'string'
+      && typeof task.person === 'string'
+      && typeof task.done === 'boolean')
+    && Array.isArray(state.expenses)
+    && state.expenses.every(expense => expense
+      && typeof expense.name === 'string'
+      && Number.isFinite(expense.amount)
+      && expense.amount >= 0
+      && typeof expense.person === 'string'
+      && typeof expense.date === 'string')
+    && Array.isArray(state.dateOptions)
+    && state.dateOptions.every(option => option
+      && validDate(option.date)
+      && typeof option.time === 'string'
+      && /^\d{2}:\d{2}$/.test(option.time)
+      && Number.isInteger(option.votes)
+      && option.votes >= 0)
+    && (state.selectedDate === '' || validDate(state.selectedDate))
+    && (state.currentVote === '' || validDate(state.currentVote));
+}
+
+function isValidStoredData(data) {
+  return data
+    && data.version === 1
+    && Array.isArray(data.events)
+    && data.events.length > 0
+    && data.events.every(event => event
+      && typeof event.id === 'string'
+      && /^[a-zA-Z0-9_-]+$/.test(event.id)
+      && typeof event.name === 'string'
+      && typeof event.type === 'string'
+      && validDate(event.date)
+      && typeof event.location === 'string'
+      && typeof event.description === 'string'
+      && typeof event.badge === 'string')
+    && new Set(data.events.map(event => event.id)).size === data.events.length
+    && data.eventStates
+    && typeof data.eventStates === 'object'
+    && data.events.every(event => isValidEventState(data.eventStates[event.id]))
+    && data.events.some(event => event.id === data.currentEventId);
+}
+
+function saveCurrentEventData() {
+  eventStates[currentEvent.id] = {
+    attendees: cloneData(attendees),
+    tasks: cloneData(tasks),
+    expenses: cloneData(expenses),
+    dateOptions: cloneData(dateOptions),
+    selectedDate,
+    currentVote
+  };
+}
+
+function persistAppState() {
+  saveCurrentEventData();
+  try {
+    localStorage.setItem(storageKey, JSON.stringify({
+      version: 1,
+      events: eventTemplates,
+      eventStates,
+      currentEventId: currentEvent.id
+    }));
+    return true;
+  } catch (error) {
+    console.error('Unable to persist Organiza+ data in this browser.', error);
+    showToast('No se pudo guardar en este navegador. Los cambios solo estarán disponibles mientras no cierres esta página.');
+    return false;
+  }
+}
+
+function restoreEventData(eventId) {
+  const state = eventStates[eventId] || createEmptyEventState(currentEvent);
+  eventStates[eventId] = cloneData(state);
+  attendees = cloneData(state.attendees);
+  tasks = cloneData(state.tasks);
+  expenses = cloneData(state.expenses);
+  dateOptions = cloneData(state.dateOptions);
+  selectedDate = state.selectedDate;
+  currentVote = state.currentVote;
+}
+
+function loadPersistedData() {
+  let serialized;
+  try {
+    serialized = localStorage.getItem(storageKey);
+  } catch (error) {
+    console.error('Unable to access Organiza+ browser storage.', error);
+    showToast('El navegador no permite acceder al almacenamiento local; los cambios no persistirán al cerrar.');
+    return;
+  }
+  if (!serialized) return;
+
+  let storedData;
+  try {
+    storedData = JSON.parse(serialized);
+  } catch (error) {
+    console.error('Unable to parse saved Organiza+ data.', error);
+    showToast('Los datos guardados no se pudieron leer; se mantiene la demo inicial.');
+    return;
+  }
+  if (!isValidStoredData(storedData)) {
+    showToast('Los datos guardados no tienen un formato válido; se mantiene la demo inicial.');
+    return;
+  }
+
+  eventTemplates = storedData.events;
+  eventStates = storedData.eventStates;
+  currentEvent = eventTemplates.find(event => event.id === storedData.currentEventId);
+  restoreEventData(currentEvent.id);
+}
+
+function activateEvent(event) {
+  saveCurrentEventData();
+  currentEvent = event;
+  restoreEventData(event.id);
+  renderAll();
+  const saved = persistAppState();
+  if (currentEvent.inviteToken) refreshRemoteAttendees();
+  return saved;
+}
+
+function getEventStatePayload() {
+  saveCurrentEventData();
+  return eventStates[currentEvent.id];
+}
+
+async function ensureRemoteInvitation() {
+  if (currentEvent.inviteToken && currentEvent.inviteUrl) {
+    return { inviteToken: currentEvent.inviteToken, inviteUrl: currentEvent.inviteUrl };
+  }
+  const state = getEventStatePayload();
+  const invitation = await requestApi('/api/events', {
+    method: 'POST',
+    body: JSON.stringify({
+      clientEventId: currentEvent.id,
+      event: currentEvent,
+      attendees: state.attendees,
+      tasks: state.tasks,
+      dateOptions: state.dateOptions
+    })
+  });
+  currentEvent.inviteToken = invitation.inviteToken;
+  currentEvent.inviteUrl = invitation.inviteUrl;
+  persistAppState();
+  return invitation;
+}
+
+function updateInviteSyncStatus(message) {
+  const attendeeStatus = $('#attendee-sync-status');
+  const modalStatus = $('#invite-sync-status');
+  if (attendeeStatus) attendeeStatus.textContent = message;
+  if (modalStatus) modalStatus.textContent = message;
+}
+
+async function refreshRemoteAttendees(showError = false) {
+  if (!currentEvent.inviteToken || inviteRefreshInProgress) return;
+  inviteRefreshInProgress = true;
+  updateInviteSyncStatus('Actualizando confirmaciones…');
+  try {
+    const invitation = await requestApi(`/api/invitations/${encodeURIComponent(currentEvent.inviteToken)}`);
+    const refreshedAttendees = invitation.attendees;
+    if (JSON.stringify(attendees) !== JSON.stringify(refreshedAttendees)) {
+      attendees = refreshedAttendees;
+      saveCurrentEventData();
+      renderAttendees();
+      renderExpenses();
+      persistAppState();
+    }
+    updateInviteSyncStatus('Confirmaciones sincronizadas.');
+  } catch (error) {
+    console.error('Unable to refresh remote event attendees.', error);
+    updateInviteSyncStatus('No se pudieron actualizar las confirmaciones.');
+    if (showError) showToast(error.message);
+  } finally {
+    inviteRefreshInProgress = false;
+  }
+}
+
+async function openInviteFlow() {
+  $('#invite-event-summary').textContent = `Preparando invitación para «${currentEvent.name}»…`;
+  $('#invite-link').textContent = 'Generando enlace privado…';
+  $('#whatsapp-share-link').removeAttribute('href');
+  openDialog('#invite-modal');
+  try {
+    const invitation = await ensureRemoteInvitation();
+    const inviteUrl = invitation.inviteUrl;
+    const dateText = formatDateLong(currentEvent.date);
+    $('#invite-event-summary').textContent = `Comparte el enlace para que el grupo confirme su asistencia a «${currentEvent.name}».`;
+    $('#invite-link').textContent = inviteUrl;
+    $('#whatsapp-share-link').href = `https://wa.me/?text=${encodeURIComponent(`¡Hola! Te invito a «${currentEvent.name}» el ${dateText} a las ${currentEvent.time || '14:00'} en ${currentEvent.location}. Confirma aquí: ${inviteUrl}`)}`;
+    updateInviteSyncStatus('Los invitados que confirmen aparecerán en la lista.');
+  } catch (error) {
+    console.error('Unable to create the event invitation.', error);
+    $('#invite-modal').close();
+    showToast(error.message);
+  }
 }
 
 function personColor(name) {
@@ -126,6 +407,7 @@ function renderTasks() {
       const task = tasks[Number(button.dataset.taskIndex)];
       task.done = !task.done;
       renderTasks();
+      persistAppState();
     });
   });
 }
@@ -217,6 +499,7 @@ function renderDateOptions() {
   `).join('');
   const totalVotes = dateOptions.reduce((sum, option) => sum + option.votes, 0);
   $('#vote-message').textContent = currentVote ? `Tu voto: ${formatDateLong(currentVote)}` : `${totalVotes} votos registrados`;
+  $('#add-vote-button').textContent = currentVote && selectedDate === currentVote ? 'Votado ✓' : 'Votar →';
 }
 
 function populatePeopleOptions() {
@@ -243,10 +526,7 @@ function renderEventGallery() {
     card.addEventListener('click', () => {
       const selected = eventTemplates.find(event => event.id === card.dataset.eventId);
       if (selected) {
-        currentEvent = selected;
-        renderCurrentEvent();
-        renderEventGallery();
-        showToast(`Mostrando ${selected.name}`);
+        if (activateEvent(selected)) showToast(`Mostrando ${selected.name}`);
       }
     });
   });
@@ -327,14 +607,15 @@ $('#confirm-button').addEventListener('click', () => {
   }
   renderAttendees();
   renderExpenses();
+  persistAppState();
 });
 
 $('#date-options').addEventListener('click', event => {
   const button = event.target.closest('.date-option');
   if (!button) return;
   selectedDate = button.dataset.date;
-  $('#add-vote-button').textContent = selectedDate === currentVote ? 'Votado ✓' : 'Votar →';
   renderDateOptions();
+  persistAppState();
 });
 
 $('#add-vote-button').addEventListener('click', () => {
@@ -357,7 +638,7 @@ $('#add-vote-button').addEventListener('click', () => {
   renderDateOptions();
   $('#vote-message').textContent = `¡Voto registrado para ${formatDateLong(selectedDate)}!`;
   $('#add-vote-button').textContent = 'Votado ✓';
-  showToast(`Tu voto para ${formatDateLong(selectedDate)} se ha guardado.`);
+  if (persistAppState()) showToast(`Tu voto para ${formatDateLong(selectedDate)} se ha guardado.`);
 });
 
 function openDialog(id) {
@@ -369,8 +650,8 @@ function openDialog(id) {
 $('#open-task-modal').addEventListener('click', () => openDialog('#task-modal'));
 $('#open-task-modal-secondary').addEventListener('click', () => openDialog('#task-modal'));
 $('#open-expense-modal').addEventListener('click', () => openDialog('#expense-modal'));
-$('#invite-button').addEventListener('click', () => openDialog('#invite-modal'));
-$('#share-button').addEventListener('click', () => openDialog('#invite-modal'));
+$('#invite-button').addEventListener('click', openInviteFlow);
+$('#share-button').addEventListener('click', openInviteFlow);
 $('#create-event-button').addEventListener('click', startEventWizard);
 $$('.modal-close').forEach(button => button.addEventListener('click', () => button.closest('dialog').close()));
 
@@ -645,6 +926,7 @@ function completeEventWizard() {
     allowGuests: form.get('allowGuests') === 'on',
     invitees: wizardInvitees.slice()
   };
+  saveCurrentEventData();
   eventTemplates.unshift(newEvent);
   currentEvent = newEvent;
   attendees = [organizer, ...invitees];
@@ -666,9 +948,10 @@ function completeEventWizard() {
   currentVote = selectedOption.date;
   $('#add-vote-button').textContent = 'Votado ✓';
   renderAll();
+  const saved = persistAppState();
   $('#event-modal').close();
   setTab('overview');
-  showToast(`¡Listo! ${name} ya tiene invitaciones, fechas y lista de cosas.`);
+  if (saved) showToast(`¡Listo! ${name} ya tiene invitaciones, fechas y lista de cosas.`);
 }
 
 $('#wizard-finish').addEventListener('click', completeEventWizard);
@@ -680,9 +963,10 @@ $('#task-form').addEventListener('submit', event => {
   const person = form.get('person');
   tasks.push({ name: form.get('name').trim(), quantity: form.get('quantity').trim(), person, done: false });
   renderTasks();
+  const saved = persistAppState();
   event.currentTarget.reset();
   $('#task-modal').close();
-  showToast(person ? '¡Añadido! Ya tiene responsable.' : 'Añadido a la lista. Queda pendiente de asignar.');
+  if (saved) showToast(person ? '¡Añadido! Ya tiene responsable.' : 'Añadido a la lista. Queda pendiente de asignar.');
 });
 
 $('#expense-form').addEventListener('submit', event => {
@@ -700,13 +984,18 @@ $('#expense-form').addEventListener('submit', event => {
     date: 'Ahora'
   });
   renderExpenses();
+  const saved = persistAppState();
   event.currentTarget.reset();
   $('#expense-modal').close();
-  showToast('Ticket guardado y gastos actualizados.');
+  if (saved) showToast('Ticket guardado y gastos actualizados.');
 });
 
 $('#copy-invite-button').addEventListener('click', async () => {
-  const inviteUrl = 'https://organiza.app/e/barbacoa-juan';
+  const inviteUrl = $('#invite-link').textContent;
+  if (!/^https?:\/\//.test(inviteUrl)) {
+    showToast('El enlace de invitación todavía no está disponible.');
+    return;
+  }
   try {
     await navigator.clipboard.writeText(inviteUrl);
     showToast('Enlace copiado. ¡Compártelo con el grupo!');
@@ -717,14 +1006,19 @@ $('#copy-invite-button').addEventListener('click', async () => {
     field.style.opacity = '0';
     document.body.appendChild(field);
     field.select();
-    document.execCommand('copy');
+    const copied = document.execCommand('copy');
     field.remove();
-    showToast('Enlace copiado. ¡Compártelo con el grupo!');
+    showToast(copied ? 'Enlace copiado. ¡Compártelo con el grupo!' : 'No se pudo copiar el enlace; selecciónalo y cópialo manualmente.');
   }
 });
 
 $('#native-share-button').addEventListener('click', async event => {
-  const shareData = { title: 'Barbacoa en casa de Juan', text: '¡Te apuntas al plan?', url: 'https://organiza.app/e/barbacoa-juan' };
+  const inviteUrl = $('#invite-link').textContent;
+  const shareData = {
+    title: currentEvent.name,
+    text: `¡Te apuntas a ${currentEvent.name}?`,
+    url: inviteUrl
+  };
   if (navigator.share) {
     try {
       await navigator.share(shareData);
@@ -737,6 +1031,76 @@ $('#native-share-button').addEventListener('click', async event => {
   }
 });
 
+async function loadInvitationFromLink() {
+  const routeMatch = window.location.pathname.match(/^\/join\/([A-Za-z0-9_-]{32})\/?$/);
+  if (!routeMatch) return;
+
+  activeInviteToken = routeMatch[1];
+  $('#join-feedback').textContent = 'Cargando los detalles del evento…';
+  openDialog('#join-modal');
+  try {
+    const invitation = await requestApi(`/api/invitations/${encodeURIComponent(activeInviteToken)}`);
+    const remoteEvent = {
+      ...invitation.event,
+      inviteToken: activeInviteToken,
+      inviteUrl: `${window.location.origin}/join/${activeInviteToken}`
+    };
+    const existingState = eventStates[remoteEvent.id];
+    eventTemplates = [remoteEvent, ...eventTemplates.filter(event => event.id !== remoteEvent.id)];
+    eventStates[remoteEvent.id] = {
+      attendees: cloneData(invitation.attendees),
+      tasks: existingState ? cloneData(existingState.tasks) : cloneData(invitation.tasks),
+      expenses: existingState ? cloneData(existingState.expenses) : [],
+      dateOptions: existingState ? cloneData(existingState.dateOptions) : cloneData(invitation.dateOptions),
+      selectedDate: existingState ? existingState.selectedDate : remoteEvent.date,
+      currentVote: existingState ? existingState.currentVote : ''
+    };
+    currentEvent = remoteEvent;
+    restoreEventData(remoteEvent.id);
+    renderAll();
+    persistAppState();
+    $('#join-event-name').textContent = remoteEvent.name;
+    $('#join-event-details').textContent = `${formatDateLong(remoteEvent.date)} · ${remoteEvent.time || '14:00'} · ${remoteEvent.location}`;
+    $('#join-feedback').textContent = '';
+  } catch (error) {
+    console.error('Unable to load the event invitation.', error);
+    $('#join-event-name').textContent = 'Invitación no disponible';
+    $('#join-event-details').textContent = 'El enlace puede haber caducado o no estar publicado correctamente.';
+    $('#join-feedback').textContent = error.message;
+    $('#join-submit').disabled = true;
+  }
+}
+
+$('#join-form').addEventListener('submit', async event => {
+  event.preventDefault();
+  const name = $('#join-name').value.trim();
+  if (!name || !activeInviteToken) {
+    $('#join-feedback').textContent = 'Escribe tu nombre para confirmar que te unes.';
+    return;
+  }
+  const submitButton = $('#join-submit');
+  submitButton.disabled = true;
+  $('#join-feedback').textContent = 'Guardando tu confirmación…';
+  try {
+    const result = await requestApi(`/api/invitations/${encodeURIComponent(activeInviteToken)}/join`, {
+      method: 'POST',
+      body: JSON.stringify({ name })
+    });
+    attendees = result.attendees;
+    saveCurrentEventData();
+    renderAll();
+    persistAppState();
+    $('#join-modal').close();
+    setTab('overview');
+    showToast(`¡Listo, ${name}! Ya apareces en la lista de asistentes.`);
+  } catch (error) {
+    console.error('Unable to add the invited guest.', error);
+    $('#join-feedback').textContent = error.message;
+  } finally {
+    submitButton.disabled = false;
+  }
+});
+
 function renderAll() {
   renderEventGallery();
   renderCurrentEvent();
@@ -746,4 +1110,9 @@ function renderAll() {
   renderExpenses();
 }
 
+loadPersistedData();
 renderAll();
+loadInvitationFromLink();
+window.setInterval(() => {
+  if (currentEvent.inviteToken) refreshRemoteAttendees();
+}, 15000);

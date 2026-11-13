@@ -292,6 +292,9 @@ h1 { margin-bottom: 6px; color: #263a30; font-size: clamp(24px, 2.4vw, 31px); fo
 .modal-submit { width: 100%; margin-top: 12px; padding: 12px; }
 .invite-link-box { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 4px; padding: 9px 10px; border: 1px solid #e6ebe3; border-radius: 7px; background: #f8faf6; color: #5e6d62; font-size: 10px; }
 .invite-link-box button { padding: 6px 9px; border: 0; border-radius: 5px; background: #e8f1e7; color: var(--green); font-size: 10px; font-weight: 700; }
+.whatsapp-share-link { text-decoration: none; }
+.sync-note { display: block; color: #849089; font-size: 10px; }
+.join-feedback { min-height: 14px; color: #a64b35 !important; }
 .toast { position: fixed; z-index: 10; right: 25px; bottom: 24px; max-width: calc(100vw - 40px); padding: 12px 17px; border-radius: 8px; background: #263e30; color: white; box-shadow: 0 8px 25px rgba(26,44,32,.2); font-size: 11px; opacity: 0; pointer-events: none; transform: translateY(8px); transition: opacity .2s, transform .2s; }
 .toast.show { opacity: 1; transform: translateY(0); }
 

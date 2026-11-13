@@ -147,7 +147,7 @@
         </section>
 
         <div class="tab-view hidden" id="attendees-view">
-          <div class="tab-header"><div><span class="section-eyebrow">EL GRUPO</span><h2>Asistentes</h2><p>Que nadie se quede sin confirmar.</p></div><button class="primary-button" id="invite-button">＋ Invitar personas</button></div>
+          <div class="tab-header"><div><span class="section-eyebrow">EL GRUPO</span><h2>Asistentes</h2><p>Que nadie se quede sin confirmar.</p><small class="sync-note" id="attendee-sync-status">Las confirmaciones de invitados aparecerán aquí.</small></div><button class="primary-button" id="invite-button">＋ Invitar personas</button></div>
           <div class="attendee-list panel" id="attendee-list"></div>
         </div>
 
@@ -255,9 +255,24 @@
       <button class="modal-close" type="button" aria-label="Cerrar">×</button>
       <span class="section-eyebrow">CUANTOS MÁS, MEJOR</span>
       <h2>Invita al grupo</h2>
-      <p>Comparte este enlace con quien quieras que se apunte.</p>
-      <div class="invite-link-box"><span id="invite-link">organiza.app/e/barbacoa-juan</span><button type="button" id="copy-invite-button">Copiar</button></div>
-      <button class="primary-button modal-submit" id="native-share-button" type="button">Compartir invitación <span>↗</span></button>
+      <p id="invite-event-summary">Generando un enlace privado para este evento…</p>
+      <div class="invite-link-box"><span id="invite-link">Preparando invitación…</span><button type="button" id="copy-invite-button">Copiar</button></div>
+      <a class="primary-button modal-submit whatsapp-share-link" id="whatsapp-share-link" href="#" target="_blank" rel="noopener noreferrer">Enviar por WhatsApp <span>↗</span></a>
+      <button class="secondary-button modal-submit" id="native-share-button" type="button">Compartir con otra aplicación</button>
+      <small class="sync-note" id="invite-sync-status">Los invitados que confirmen aparecerán en la lista.</small>
+    </form>
+  </dialog>
+
+  <dialog class="app-modal" id="join-modal">
+    <form class="modal-form" id="join-form">
+      <button class="modal-close" type="button" aria-label="Cerrar">×</button>
+      <span class="section-eyebrow">TE HAN INVITADO</span>
+      <h2 id="join-event-name">Cargando evento…</h2>
+      <p id="join-event-details">Consulta el plan y confirma si te unes.</p>
+      <label for="join-name">Tu nombre</label>
+      <input id="join-name" name="name" required maxlength="60" autocomplete="name" placeholder="Ej. María López">
+      <p class="join-feedback" id="join-feedback" role="status" aria-live="polite"></p>
+      <button class="primary-button modal-submit" id="join-submit" type="submit">Sí, me uno <span>✓</span></button>
     </form>
   </dialog>
 </body>

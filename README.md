@@ -1,30 +1,46 @@
 # Organiza+ — prototipo web
 
-Demo interactiva, adaptable a móvil y sin dependencias externas.
+Aplicación web adaptable a móvil para organizar eventos. Incluye una API Node.js sin dependencias externas para crear enlaces de invitación y guardar confirmaciones de asistencia entre dispositivos.
 
-## Abrir
+## Requisitos
 
-Abre `index.html` directamente en un navegador moderno.
+- Node.js 16 o posterior
+
+## Ejecutar en local
+
+Desde esta carpeta:
+
+```powershell
+npm start
+```
+
+Abre `http://localhost:3000`. Las invitaciones solo funcionan cuando la aplicación se sirve desde este servidor; abrir `index.html` directamente permite explorar la demo local, pero no crear enlaces que otros dispositivos puedan usar.
+
+## Invitaciones por WhatsApp
+
+1. Crea o selecciona un evento y pulsa «Compartir invitación».
+2. Organiza+ crea un enlace privado para ese evento.
+3. Pulsa «Enviar por WhatsApp», elige el grupo o los contactos y envía el mensaje preparado.
+4. Cada invitado abre el enlace, escribe su nombre y confirma que se une. La lista de asistentes se actualiza en el evento del organizador.
+
+WhatsApp no envía mensajes automáticamente: la persona organizadora siempre elige el chat y confirma el envío. El enlace funciona como invitación; cualquiera que lo reciba puede unirse mientras haya aforo.
+
+## Publicar para invitados
+
+El servidor y la API deben estar disponibles en una URL pública con HTTPS para que funcionen los enlaces desde los móviles de los invitados. En el servidor, configura `PUBLIC_APP_URL` con el origen público y `HOST=0.0.0.0`, y ejecuta `npm start`. Por ejemplo:
+
+```powershell
+$env:PUBLIC_APP_URL = "https://eventos.ejemplo.com"
+$env:HOST = "0.0.0.0"
+npm start
+```
+
+Configura el proxy o plataforma de alojamiento para enviar tanto la web como las rutas `/api/` al proceso Node.js. Los eventos se almacenan en `data/invitations.json`; esa carpeta está excluida de Git. Conserva una copia de ese archivo al hacer copias de seguridad.
 
 ## Probar
 
-- Cambia entre resumen, asistentes, lista de cosas y gastos desde el menú.
-- Confirma o cambia tu asistencia y vota por una fecha.
-- Añade elementos a la lista y asígnalos; marca tareas como completadas.
-- Añade tickets para ver cómo cambian el total, el coste por persona y los balances.
-- Usa «Compartir invitación» para copiar el enlace de muestra.
-- Crea un evento con «Crear evento» y completa los cuatro pasos: detalles, invitados por correo, propuesta y voto de fechas, lista inicial de tareas y responsables.
-- Al terminar, el nuevo evento queda seleccionado y sus asistentes, fechas y tareas aparecen en el resumen.
+```powershell
+npm test
+```
 
-## Segunda fase añadida
-
-La demo ya incluye:
-
-- selector de eventos con varios casos de uso,
-- asistente de creación en cuatro pasos con validación de datos,
-- invitaciones de demostración por correo (sin envío real),
-- votación de una fecha propuesta y creación de una lista inicial de tareas,
-- vistas más realistas para seguimiento del plan,
-- mejor preparación para la siguiente fase de IA, invitaciones y notificaciones.
-
-Los datos solo viven en la página y se restablecen al recargar. No hay backend, autenticación ni envío real de invitaciones.
+Las confirmaciones de asistencia se comparten por la API; las tareas, votaciones y gastos siguen siendo datos locales del navegador. Esta versión no tiene cuentas de usuario: quien tenga el enlace de invitación puede ver el plan y unirse.
