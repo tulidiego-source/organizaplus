@@ -304,9 +304,9 @@ async function deleteCurrentEvent() {
     showToast('Debe quedar al menos un evento en la aplicación.');
     return;
   }
-  if (!window.confirm(`¿Quieres eliminar «${currentEvent.name}»? Esta acción no se puede deshacer.`)) return;
 
   try {
+    $('#confirm-delete').disabled = true;
     if (currentEvent.inviteToken) {
       await requestApi(`/api/invitations/${encodeURIComponent(currentEvent.inviteToken)}`, {
         method: 'DELETE',
@@ -320,11 +320,25 @@ async function deleteCurrentEvent() {
     restoreEventData(currentEvent.id);
     renderAll();
     persistAppState();
+    $('#delete-confirm-modal').close();
     showToast('Evento eliminado.');
   } catch (error) {
     console.error('Unable to delete event.', error);
     showToast(error.message);
+  } finally {
+    $('#confirm-delete').disabled = false;
   }
+}
+
+function openEventActions() {
+  $('#event-actions-title').textContent = currentEvent.name;
+  openDialog('#event-actions-modal');
+}
+
+function openDeleteConfirmation() {
+  $('#event-actions-modal').close();
+  $('#delete-confirm-copy').textContent = `Se eliminará «${currentEvent.name}» junto con sus invitaciones, tareas y gastos.`;
+  openDialog('#delete-confirm-modal');
 }
 
 function getEventStatePayload() {
@@ -765,7 +779,10 @@ $('#open-expense-modal').addEventListener('click', () => openDialog('#expense-mo
 $('#invite-button').addEventListener('click', openInviteFlow);
 $('#share-button').addEventListener('click', openInviteFlow);
 $('#create-event-button').addEventListener('click', startEventWizard);
-$('#delete-event-button').addEventListener('click', deleteCurrentEvent);
+$('#delete-event-button').addEventListener('click', openEventActions);
+$('#open-delete-confirm').addEventListener('click', openDeleteConfirmation);
+$('#cancel-delete').addEventListener('click', () => $('#delete-confirm-modal').close());
+$('#confirm-delete').addEventListener('click', deleteCurrentEvent);
 $$('.modal-close').forEach(button => button.addEventListener('click', () => button.closest('dialog').close()));
 
 function localDateAfter(days) {

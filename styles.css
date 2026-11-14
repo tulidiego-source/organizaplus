@@ -246,6 +246,20 @@ h1 { margin-bottom: 6px; color: #263a30; font-size: clamp(24px, 2.4vw, 31px); fo
 .app-modal { width: min(440px, calc(100vw - 32px)); padding: 0; border: 0; border-radius: 14px; box-shadow: 0 20px 70px rgba(28,45,34,.22); }
 .app-modal#event-modal { width: min(650px, calc(100vw - 32px)); max-height: min(90vh, 850px); overflow: auto; }
 .app-modal::backdrop { background: rgba(32,45,37,.38); backdrop-filter: blur(3px); }
+.event-actions-modal { width: min(340px, calc(100vw - 32px)); }
+.delete-confirm-modal { width: min(460px, calc(100vw - 32px)); }
+.event-actions-modal .modal-form, .delete-confirm-modal .modal-form { gap: 12px; }
+.event-actions-modal h2, .delete-confirm-modal h2 { margin: 0; color: #304337; font-size: 21px; letter-spacing: -.6px; }
+.event-actions-modal p, .delete-confirm-modal p { margin: 0; color: #8b968e; font-size: 11px; line-height: 1.5; }
+.event-action-danger, .danger-button { display: inline-flex; align-items: center; justify-content: space-between; gap: 10px; border: 1px solid #f0d8d0; border-radius: 7px; background: #fff7f4; color: #b85f4f; font-size: 11px; font-weight: 700; }
+.event-action-danger { width: 100%; padding: 12px 13px; text-align: left; }
+.event-action-danger:hover, .danger-button:hover { border-color: #e7b8aa; background: #fff0eb; }
+.event-action-danger span { font-size: 15px; }
+.modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 7px; }
+.modal-actions button { min-height: 36px; padding: 9px 13px; }
+.danger-button { justify-content: center; border-color: #cf806d; background: #c96e5b; color: white; }
+.danger-button:hover { border-color: #b95d4b; background: #b95d4b; }
+.danger-button:disabled { cursor: wait; opacity: .65; }
 .modal-form { position: relative; display: grid; gap: 8px; padding: 29px; }
 .modal-form textarea { width: 100%; padding: 10px 11px; resize: vertical; border: 1px solid #e4e9e2; border-radius: 6px; outline: none; color: #35473b; font: inherit; font-size: 11px; }
 .modal-form textarea:focus { border-color: #96b59b; box-shadow: 0 0 0 3px rgba(94,145,102,.1); }

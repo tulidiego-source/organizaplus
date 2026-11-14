@@ -178,6 +178,28 @@
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
+  <dialog class="app-modal event-actions-modal" id="event-actions-modal">
+    <form method="dialog" class="modal-form">
+      <button class="modal-close" type="button" aria-label="Cerrar">×</button>
+      <span class="section-eyebrow">OPCIONES DEL EVENTO</span>
+      <h2 id="event-actions-title">Opciones</h2>
+      <button class="event-action-danger" id="open-delete-confirm" type="button">Eliminar evento <span>⌫</span></button>
+    </form>
+  </dialog>
+
+  <dialog class="app-modal delete-confirm-modal" id="delete-confirm-modal">
+    <form method="dialog" class="modal-form" id="delete-confirm-form">
+      <button class="modal-close" type="button" aria-label="Cerrar">×</button>
+      <span class="section-eyebrow">ELIMINAR EVENTO</span>
+      <h2>¿Seguro que quieres eliminarlo?</h2>
+      <p id="delete-confirm-copy">Esta acción no se puede deshacer.</p>
+      <div class="modal-actions">
+        <button class="secondary-button" id="cancel-delete" type="button">Cancelar</button>
+        <button class="danger-button" id="confirm-delete" type="button">Eliminar evento</button>
+      </div>
+    </form>
+  </dialog>
+
   <dialog class="app-modal" id="task-modal">
     <form method="dialog" class="modal-form" id="task-form">
       <button class="modal-close" type="button" aria-label="Cerrar">×</button>
