@@ -5,9 +5,9 @@ services:
     buildCommand: npm install
     startCommand: npm start
     envVars:
-      - key: DATABASE_URL
+      - key: postgresql://postgres.rbpmmjixhunzzazcqyvk:9rn2faS,%G#_8wB@aws-0-eu-west-1.pooler.supabase.com:5432/postgres
         sync: false
-      - key: DATABASE_SSL
+      - key: postgresql://postgres.rbpmmjixhunzzazcqyvk:9rn2faS,%G#_8wB@aws-0-eu-west-1.pooler.supabase.com:5432/postgres
         value: "true"
       - key: HOST
         value: "0.0.0.0"
