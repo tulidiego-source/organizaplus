@@ -291,11 +291,20 @@ function createEventRecord(body, ownerUserId = null) {
 function createAppServer(options = {}) {
   const databaseFile = options.databaseFile || defaultDatabaseFile;
   const databaseUrl = options.databaseUrl || process.env.DATABASE_URL || '';
+  const databaseConfig = databaseUrl ? { connectionString: databaseUrl } : (
+    process.env.PGHOST && process.env.PGPASSWORD ? {
+      host: process.env.PGHOST,
+      port: Number(process.env.PGPORT || 5432),
+      database: process.env.PGDATABASE || 'postgres',
+      user: process.env.PGUSER || 'postgres',
+      password: process.env.PGPASSWORD
+    } : null
+  );
   let pool = null;
-  if (databaseUrl) {
+  if (databaseConfig) {
     const { Pool } = require('pg');
     pool = new Pool({
-      connectionString: databaseUrl,
+      ...databaseConfig,
       ssl: process.env.DATABASE_SSL === 'false' ? false : { rejectUnauthorized: false }
     });
   }
