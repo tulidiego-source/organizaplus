@@ -304,6 +304,8 @@ function createAppServer(options = {}) {
     const { Pool } = require('pg');
     pool = new Pool({
       ...databaseConfig,
+      connectionTimeoutMillis: 10000,
+      query_timeout: 10000,
       ssl: process.env.DATABASE_SSL === 'false' ? false : { rejectUnauthorized: false }
     });
   }
@@ -741,15 +743,13 @@ function createAppServer(options = {}) {
 
 if (require.main === module) {
   const server = createAppServer();
-  server.ready.then(() => {
-    const host = process.env.HOST || '127.0.0.1';
-    const port = Number(process.env.PORT) || 3000;
-    server.listen(port, host, () => {
-      console.log(`OrganizaT disponible en http://${host}:${port}`);
-    });
-  }).catch(error => {
-    console.error('No se pudo iniciar OrganizaT.', error);
-    process.exitCode = 1;
+  const host = process.env.HOST || '127.0.0.1';
+  const port = Number(process.env.PORT) || 3000;
+  server.listen(port, host, () => {
+    console.log(`OrganizaT disponible en http://${host}:${port}`);
+  });
+  server.ready.catch(error => {
+    console.error('No se pudo cargar el almacenamiento de invitaciones.', error);
   });
 }
 
