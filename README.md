@@ -1,4 +1,4 @@
-# Organiza+ — prototipo web
+# OrganizaT — prototipo web
 
 Aplicación web adaptable a móvil para organizar eventos. Incluye una API Node.js sin dependencias externas para crear enlaces de invitación y guardar confirmaciones de asistencia entre dispositivos.
 
@@ -19,7 +19,7 @@ Abre `http://localhost:3000`. Las invitaciones solo funcionan cuando la aplicaci
 ## Invitaciones por WhatsApp
 
 1. Crea o selecciona un evento y pulsa «Compartir invitación».
-2. Organiza+ crea un enlace privado para ese evento.
+2. OrganizaT crea un enlace privado para ese evento.
 3. Pulsa «Enviar por WhatsApp», elige el grupo o los contactos y envía el mensaje preparado.
 4. Cada invitado abre el enlace, escribe su nombre y confirma que se une. La lista de asistentes se actualiza en el evento del organizador.
 

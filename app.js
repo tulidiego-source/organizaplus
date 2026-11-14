@@ -83,6 +83,8 @@ let wizardTasks = [];
 const storageKey = 'organiza-plus.data.v1';
 let activeInviteToken = '';
 let inviteRefreshInProgress = false;
+let remoteStateSyncInProgress = false;
+let remoteStateSyncQueued = false;
 
 async function requestApi(route, options = {}) {
   let response;
@@ -240,7 +242,7 @@ function persistAppState() {
     }));
     return true;
   } catch (error) {
-    console.error('Unable to persist Organiza+ data in this browser.', error);
+    console.error('Unable to persist OrganizaT data in this browser.', error);
     showToast('No se pudo guardar en este navegador. Los cambios solo estarán disponibles mientras no cierres esta página.');
     return false;
   }
@@ -262,7 +264,7 @@ function loadPersistedData() {
   try {
     serialized = localStorage.getItem(storageKey);
   } catch (error) {
-    console.error('Unable to access Organiza+ browser storage.', error);
+    console.error('Unable to access OrganizaT browser storage.', error);
     showToast('El navegador no permite acceder al almacenamiento local; los cambios no persistirán al cerrar.');
     return;
   }
@@ -272,7 +274,7 @@ function loadPersistedData() {
   try {
     storedData = JSON.parse(serialized);
   } catch (error) {
-    console.error('Unable to parse saved Organiza+ data.', error);
+    console.error('Unable to parse saved OrganizaT data.', error);
     showToast('Los datos guardados no se pudieron leer; se mantiene la demo inicial.');
     return;
   }
@@ -303,8 +305,8 @@ function getEventStatePayload() {
 }
 
 async function ensureRemoteInvitation() {
-  if (currentEvent.inviteToken && currentEvent.inviteUrl) {
-    return { inviteToken: currentEvent.inviteToken, inviteUrl: currentEvent.inviteUrl };
+  if (currentEvent.inviteToken && currentEvent.inviteUrl && currentEvent.ownerToken) {
+    return { inviteToken: currentEvent.inviteToken, inviteUrl: currentEvent.inviteUrl, ownerToken: currentEvent.ownerToken };
   }
   const state = getEventStatePayload();
   const invitation = await requestApi('/api/events', {
@@ -314,11 +316,13 @@ async function ensureRemoteInvitation() {
       event: currentEvent,
       attendees: state.attendees,
       tasks: state.tasks,
-      dateOptions: state.dateOptions
+      dateOptions: state.dateOptions,
+      expenses: state.expenses
     })
   });
   currentEvent.inviteToken = invitation.inviteToken;
   currentEvent.inviteUrl = invitation.inviteUrl;
+  currentEvent.ownerToken = invitation.ownerToken;
   persistAppState();
   return invitation;
 }
@@ -330,6 +334,10 @@ function updateInviteSyncStatus(message) {
   if (modalStatus) modalStatus.textContent = message;
 }
 
+function createWhatsAppShareUrl(message) {
+  return `https://api.whatsapp.com/send?text=${encodeURIComponent(message)}`;
+}
+
 async function refreshRemoteAttendees(showError = false) {
   if (!currentEvent.inviteToken || inviteRefreshInProgress) return;
   inviteRefreshInProgress = true;
@@ -337,13 +345,15 @@ async function refreshRemoteAttendees(showError = false) {
   try {
     const invitation = await requestApi(`/api/invitations/${encodeURIComponent(currentEvent.inviteToken)}`);
     const refreshedAttendees = invitation.attendees;
+    tasks = invitation.tasks;
+    dateOptions = invitation.dateOptions;
+    expenses = invitation.expenses || [];
     if (JSON.stringify(attendees) !== JSON.stringify(refreshedAttendees)) {
       attendees = refreshedAttendees;
-      saveCurrentEventData();
-      renderAttendees();
-      renderExpenses();
-      persistAppState();
     }
+    saveCurrentEventData();
+    renderAll();
+    persistAppState();
     updateInviteSyncStatus('Confirmaciones sincronizadas.');
   } catch (error) {
     console.error('Unable to refresh remote event attendees.', error);
@@ -351,6 +361,40 @@ async function refreshRemoteAttendees(showError = false) {
     if (showError) showToast(error.message);
   } finally {
     inviteRefreshInProgress = false;
+  }
+}
+
+async function syncRemoteEventState(showError = false) {
+  if (!currentEvent.inviteToken) return;
+  if (remoteStateSyncInProgress) {
+    remoteStateSyncQueued = true;
+    return;
+  }
+  remoteStateSyncInProgress = true;
+  try {
+    const state = getEventStatePayload();
+    const invitation = await requestApi(`/api/invitations/${encodeURIComponent(currentEvent.inviteToken)}/state`, {
+      method: 'PATCH',
+      headers: { 'X-Organizer-Token': currentEvent.ownerToken },
+      body: JSON.stringify({ tasks: state.tasks, dateOptions: state.dateOptions, expenses: state.expenses })
+    });
+    tasks = invitation.tasks;
+    dateOptions = invitation.dateOptions;
+    expenses = invitation.expenses || [];
+    saveCurrentEventData();
+    renderAll();
+    persistAppState();
+    updateInviteSyncStatus('Cambios compartidos con el grupo.');
+  } catch (error) {
+    console.error('Unable to synchronize shared event data.', error);
+    updateInviteSyncStatus('No se pudieron compartir los últimos cambios.');
+    if (showError) showToast(error.message);
+  } finally {
+    remoteStateSyncInProgress = false;
+    if (remoteStateSyncQueued) {
+      remoteStateSyncQueued = false;
+      syncRemoteEventState(showError);
+    }
   }
 }
 
@@ -365,7 +409,7 @@ async function openInviteFlow() {
     const dateText = formatDateLong(currentEvent.date);
     $('#invite-event-summary').textContent = `Comparte el enlace para que el grupo confirme su asistencia a «${currentEvent.name}».`;
     $('#invite-link').textContent = inviteUrl;
-    $('#whatsapp-share-link').href = `https://wa.me/?text=${encodeURIComponent(`¡Hola! Te invito a «${currentEvent.name}» el ${dateText} a las ${currentEvent.time || '14:00'} en ${currentEvent.location}. Confirma aquí: ${inviteUrl}`)}`;
+    $('#whatsapp-share-link').href = createWhatsAppShareUrl(`¡Hola! Te invito a «${currentEvent.name}» el ${dateText} a las ${currentEvent.time || '14:00'} en ${currentEvent.location}. Confirma aquí: ${inviteUrl}`);
     updateInviteSyncStatus('Los invitados que confirmen aparecerán en la lista.');
   } catch (error) {
     console.error('Unable to create the event invitation.', error);
@@ -408,6 +452,7 @@ function renderTasks() {
       task.done = !task.done;
       renderTasks();
       persistAppState();
+      syncRemoteEventState();
     });
   });
 }
@@ -561,7 +606,8 @@ function renderCurrentEvent() {
   if (dateMeta) dateMeta.textContent = `${currentEvent.time || '14:00'} h`;
   const locationMeta = document.querySelector('.meta-item:nth-child(2) small');
   if (locationMeta) {
-    locationMeta.innerHTML = `<span>${escapeHtml(currentEvent.location)}</span> <a href="#" class="map-link">Ver mapa ↗</a>`;
+    const mapQuery = encodeURIComponent(currentEvent.location);
+    locationMeta.innerHTML = `<span>${escapeHtml(currentEvent.location)}</span> <a href="https://www.google.com/maps/search/?api=1&query=${mapQuery}" class="map-link" target="_blank" rel="noopener noreferrer">Ver mapa ↗</a>`;
   }
   const heading = document.querySelector('.breadcrumbs strong');
   if (heading) heading.textContent = currentEvent.name;
@@ -573,13 +619,16 @@ function capitalize(value) {
 
 function setTab(tab) {
   const isDefaultTab = ['overview', 'attendees', 'tasks', 'expenses'].includes(tab);
+  const isInboxTab = tab === 'inbox';
   currentTab = isDefaultTab ? tab : 'overview';
+  if (isInboxTab) currentTab = 'inbox';
   $('#plan-panel').classList.toggle('hidden', currentTab !== 'overview');
   $('.date-panel').classList.toggle('hidden', currentTab !== 'overview');
   $('.attendees-panel').classList.toggle('hidden', currentTab !== 'overview');
   $('#attendees-view').classList.toggle('hidden', currentTab !== 'attendees');
   $('#tasks-view').classList.toggle('hidden', currentTab !== 'tasks');
   $('#expenses-view').classList.toggle('hidden', currentTab !== 'expenses');
+  $('#inbox-view').classList.toggle('hidden', currentTab !== 'inbox');
   $$('.sidebar .nav-link[data-tab]').forEach(button => button.classList.toggle('active', button.dataset.tab === currentTab));
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
@@ -591,6 +640,36 @@ function escapeHtml(value) {
 }
 
 $$('[data-tab]').forEach(button => button.addEventListener('click', () => setTab(button.dataset.tab)));
+
+$('.notification-button').addEventListener('click', () => setTab('inbox'));
+
+function renderNotifications() {
+  const pendingAttendees = attendees.filter(person => person.status === 'Pendiente').length;
+  const unassignedTasks = tasks.filter(task => !task.person).length;
+  const notifications = [];
+
+  if (pendingAttendees) {
+    notifications.push({ icon: '♙', title: `${pendingAttendees} persona${pendingAttendees === 1 ? '' : 's'} por confirmar`, detail: `Revisa quién falta por responder en «${currentEvent.name}».`, tab: 'attendees' });
+  }
+  if (unassignedTasks) {
+    notifications.push({ icon: '☷', title: `${unassignedTasks} tarea${unassignedTasks === 1 ? '' : 's'} sin responsable`, detail: 'Asigna lo que falta para que el grupo pueda organizarse.', tab: 'tasks' });
+  }
+  if (currentEvent.inviteToken) {
+    notifications.push({ icon: '↗', title: 'Invitación activa', detail: 'Las nuevas confirmaciones se sincronizan automáticamente.', tab: 'attendees' });
+  }
+  if (!notifications.length) {
+    notifications.push({ icon: '✓', title: 'Todo al día', detail: 'No hay avisos pendientes en este momento.', tab: 'overview' });
+  }
+
+  $('#notifications-list').innerHTML = notifications.map(notification => `
+    <button class="notification-entry" data-notification-tab="${notification.tab}">
+      <span class="notification-entry-icon">${notification.icon}</span>
+      <span class="notification-entry-copy"><strong>${escapeHtml(notification.title)}</strong><small>${escapeHtml(notification.detail)}</small></span>
+      <span class="notification-entry-arrow">→</span>
+    </button>
+  `).join('');
+  $$('#notifications-list [data-notification-tab]').forEach(button => button.addEventListener('click', () => setTab(button.dataset.notificationTab)));
+}
 
 $('#confirm-button').addEventListener('click', () => {
   const me = attendees[0];
@@ -639,6 +718,7 @@ $('#add-vote-button').addEventListener('click', () => {
   $('#vote-message').textContent = `¡Voto registrado para ${formatDateLong(selectedDate)}!`;
   $('#add-vote-button').textContent = 'Votado ✓';
   if (persistAppState()) showToast(`Tu voto para ${formatDateLong(selectedDate)} se ha guardado.`);
+  syncRemoteEventState();
 });
 
 function openDialog(id) {
@@ -988,6 +1068,7 @@ $('#expense-form').addEventListener('submit', event => {
   event.currentTarget.reset();
   $('#expense-modal').close();
   if (saved) showToast('Ticket guardado y gastos actualizados.');
+  syncRemoteEventState();
 });
 
 $('#copy-invite-button').addEventListener('click', async () => {
@@ -1009,6 +1090,14 @@ $('#copy-invite-button').addEventListener('click', async () => {
     const copied = document.execCommand('copy');
     field.remove();
     showToast(copied ? 'Enlace copiado. ¡Compártelo con el grupo!' : 'No se pudo copiar el enlace; selecciónalo y cópialo manualmente.');
+  }
+});
+
+$('#whatsapp-share-link').addEventListener('click', event => {
+  const inviteLink = $('#whatsapp-share-link').getAttribute('href');
+  if (!inviteLink || inviteLink === '#') {
+    event.preventDefault();
+    showToast('Espera a que se genere el enlace de invitación.');
   }
 });
 
@@ -1108,6 +1197,7 @@ function renderAll() {
   renderAttendees();
   renderTasks();
   renderExpenses();
+  renderNotifications();
 }
 
 loadPersistedData();

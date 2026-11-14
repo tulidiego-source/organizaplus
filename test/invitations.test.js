@@ -14,7 +14,7 @@ async function closeServer(server) {
 }
 
 async function startTestServer(options = {}) {
-  const temporaryDirectory = await fs.mkdtemp(path.join(os.tmpdir(), 'organiza-plus-'));
+  const temporaryDirectory = await fs.mkdtemp(path.join(os.tmpdir(), 'organizat-'));
   const databaseFile = path.join(temporaryDirectory, 'invitations.json');
   const server = createAppServer({
     databaseFile,
@@ -34,7 +34,7 @@ async function startTestServer(options = {}) {
   };
 }
 
-function requestJson(baseUrl, route, method, body) {
+function requestJson(baseUrl, route, method, body, headers = {}) {
   const url = new URL(route, baseUrl);
   const payload = body === undefined ? null : Buffer.from(JSON.stringify(body));
   return new Promise((resolve, reject) => {
@@ -43,8 +43,9 @@ function requestJson(baseUrl, route, method, body) {
       agent: false,
       headers: payload ? {
         'Content-Type': 'application/json',
-        'Content-Length': payload.length
-      } : {}
+        'Content-Length': payload.length,
+        ...headers
+      } : headers
     }, response => {
       const chunks = [];
       response.on('data', chunk => chunks.push(chunk));
@@ -86,7 +87,8 @@ function invitationPayload(capacity = 4) {
       color: '#c4d6c0'
     }],
     tasks: [{ name: 'Hielo', quantity: '2 bolsas', person: '', done: false }],
-    dateOptions: [{ date: '2026-12-01', time: '14:00', votes: 1 }]
+    dateOptions: [{ date: '2026-12-01', time: '14:00', votes: 1 }],
+    expenses: []
   };
 }
 
@@ -97,6 +99,7 @@ test('guests can join with an invite token and the roster survives a restart', a
     const created = await requestJson(context.baseUrl, '/api/events', 'POST', invitationPayload());
     assert.equal(created.status, 201);
     assert.match(created.body.inviteUrl, /^https:\/\/organiza\.example\/join\//);
+    assert.match(created.body.ownerToken, /^[A-Za-z0-9_-]{32}$/);
 
     const token = created.body.inviteToken;
     const joined = await requestJson(context.baseUrl, `/api/invitations/${token}/join`, 'POST', { name: 'María López' });
@@ -137,6 +140,44 @@ test('the invitation prevents duplicate names and enforces the event capacity', 
 
     const full = await requestJson(context.baseUrl, `/api/invitations/${token}/join`, 'POST', { name: 'Otra persona' });
     assert.equal(full.status, 409);
+  } finally {
+    await context.cleanup();
+  }
+});
+
+test('shared tasks, votes and expenses survive an invitation state update', async () => {
+  const context = await startTestServer();
+  try {
+    const created = await requestJson(context.baseUrl, '/api/events', 'POST', invitationPayload());
+    const token = created.body.inviteToken;
+    const updated = await requestJson(context.baseUrl, `/api/invitations/${token}/state`, 'PATCH', {
+      tasks: [{ name: 'Postre', quantity: '1 tarta', person: 'Organizadora', done: true }],
+      dateOptions: [{ date: '2026-12-02', time: '15:00', votes: 3 }],
+      expenses: [{ name: 'Tarta', amount: 24.5, person: 'Organizadora', date: 'Hoy' }]
+    }, { 'X-Organizer-Token': created.body.ownerToken });
+    assert.equal(updated.status, 200);
+    assert.equal(updated.body.tasks[0].name, 'Postre');
+    assert.equal(updated.body.dateOptions[0].votes, 3);
+    assert.equal(updated.body.expenses[0].amount, 24.5);
+
+    const fetched = await requestJson(context.baseUrl, `/api/invitations/${token}`, 'GET');
+    assert.equal(fetched.body.expenses[0].name, 'Tarta');
+  } finally {
+    await context.cleanup();
+  }
+});
+
+test('only the organizer token can update shared event state', async () => {
+  const context = await startTestServer();
+  try {
+    const created = await requestJson(context.baseUrl, '/api/events', 'POST', invitationPayload());
+    const token = created.body.inviteToken;
+    const denied = await requestJson(context.baseUrl, `/api/invitations/${token}/state`, 'PATCH', {
+      tasks: [],
+      dateOptions: [],
+      expenses: []
+    });
+    assert.equal(denied.status, 403);
   } finally {
     await context.cleanup();
   }

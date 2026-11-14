@@ -233,6 +233,15 @@ h1 { margin-bottom: 6px; color: #263a30; font-size: clamp(24px, 2.4vw, 31px); fo
 .balance-entry .owes-note { margin-left: auto; color: #8e9990; font-size: 10px; }
 .balance-entry .balance-amount { min-width: 67px; color: #478357; text-align: right; font-size: 11px; font-weight: 700; }
 .balance-entry .balance-amount.owes { color: #c7834d; }
+.notification-list { overflow: hidden; }
+.notification-entry { display: flex; width: 100%; align-items: center; gap: 12px; padding: 16px 18px; border: 0; border-bottom: 1px solid #f0f1ed; background: white; text-align: left; }
+.notification-entry:last-child { border-bottom: 0; }
+.notification-entry:hover { background: #fafcf8; }
+.notification-entry-icon { display: grid; flex: 0 0 auto; place-items: center; width: 34px; height: 34px; border-radius: 9px; background: #edf5eb; color: var(--green); font-size: 15px; }
+.notification-entry-copy { display: grid; min-width: 0; gap: 4px; }
+.notification-entry-copy strong { color: #4a594f; font-size: 11px; }
+.notification-entry-copy small { color: #909b92; font-size: 10px; }
+.notification-entry-arrow { margin-left: auto; color: #9aa59d; font-size: 14px; }
 
 .app-modal { width: min(440px, calc(100vw - 32px)); padding: 0; border: 0; border-radius: 14px; box-shadow: 0 20px 70px rgba(28,45,34,.22); }
 .app-modal#event-modal { width: min(650px, calc(100vw - 32px)); max-height: min(90vh, 850px); overflow: auto; }

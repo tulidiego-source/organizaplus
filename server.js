@@ -108,6 +108,23 @@ function normalizeDateOptions(input) {
   });
 }
 
+function normalizeExpenses(input) {
+  if (!Array.isArray(input) || input.length > 200) {
+    throw new HttpError(400, 'La lista de gastos no es válida.');
+  }
+  return input.map(expense => {
+    if (!expense || typeof expense !== 'object' || !Number.isFinite(Number(expense.amount)) || Number(expense.amount) <= 0) {
+      throw new HttpError(400, 'Hay un gasto no válido.');
+    }
+    return {
+      name: cleanText(expense.name, 'El concepto del gasto', 80),
+      amount: Math.round(Number(expense.amount) * 100) / 100,
+      person: cleanText(expense.person, 'La persona que pagó', 60),
+      date: cleanText(expense.date || '', 'La fecha del gasto', 40, false)
+    };
+  });
+}
+
 function publicAttendees(attendees) {
   return attendees.map(({ email, ...person }) => person);
 }
@@ -117,7 +134,8 @@ function publicInvitation(record) {
     event: record.event,
     attendees: publicAttendees(record.attendees),
     tasks: record.tasks,
-    dateOptions: record.dateOptions
+    dateOptions: record.dateOptions,
+    expenses: record.expenses || []
   };
 }
 
@@ -193,10 +211,12 @@ function createEventRecord(body) {
     id: crypto.randomBytes(16).toString('hex'),
     clientEventId: body.clientEventId,
     token: crypto.randomBytes(24).toString('base64url'),
+    ownerToken: crypto.randomBytes(24).toString('base64url'),
     event,
     attendees,
     tasks: normalizeTasks(body.tasks),
     dateOptions: normalizeDateOptions(body.dateOptions),
+    expenses: normalizeExpenses(body.expenses || []),
     createdAt: new Date().toISOString()
   };
 }
@@ -256,11 +276,14 @@ function createAppServer(options = {}) {
         if (!record) {
           record = createEventRecord(body);
           records.push(record);
+        } else if (!record.ownerToken) {
+          record.ownerToken = crypto.randomBytes(24).toString('base64url');
         }
         const baseUrl = getPublicBaseUrl(request, configuredBaseUrl);
         return {
           inviteToken: record.token,
-          inviteUrl: `${baseUrl}/join/${record.token}`
+          inviteUrl: `${baseUrl}/join/${record.token}`,
+          ownerToken: record.ownerToken
         };
       });
       sendJson(response, 201, result);
@@ -272,6 +295,24 @@ function createAppServer(options = {}) {
       const record = records.find(item => item.token === inviteMatch[1]);
       if (!record) throw new HttpError(404, 'La invitación no existe o ha caducado.');
       sendJson(response, 200, publicInvitation(record));
+      return;
+    }
+
+    const stateMatch = url.pathname.match(/^\/api\/invitations\/([A-Za-z0-9_-]{32})\/state$/);
+    if (request.method === 'PATCH' && stateMatch) {
+      const body = await readJsonBody(request);
+      const result = await mutateStore(() => {
+        const record = records.find(item => item.token === stateMatch[1]);
+        if (!record) throw new HttpError(404, 'La invitación no existe o ha caducado.');
+        if (!record.ownerToken || request.headers['x-organizer-token'] !== record.ownerToken) {
+          throw new HttpError(403, 'No tienes permiso para modificar este evento.');
+        }
+        record.tasks = normalizeTasks(body && body.tasks);
+        record.dateOptions = normalizeDateOptions(body && body.dateOptions);
+        record.expenses = normalizeExpenses(body && body.expenses);
+        return publicInvitation(record);
+      });
+      sendJson(response, 200, result);
       return;
     }
 
@@ -374,7 +415,7 @@ if (require.main === module) {
     const host = process.env.HOST || '127.0.0.1';
     const port = Number(process.env.PORT) || 3000;
     server.listen(port, host, () => {
-      console.log(`Organiza+ disponible en http://${host}:${port}`);
+      console.log(`OrganizaT disponible en http://${host}:${port}`);
     });
   }).catch(error => {
     console.error('No se pudo cargar el almacenamiento de invitaciones.', error);

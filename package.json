@@ -1,10 +1,10 @@
 {
-  "name": "organiza-plus",
+  "name": "organizat",
   "version": "1.0.0",
   "private": true,
   "scripts": {
     "start": "node server.js",
-    "test": "node --test test/invitations.test.js"
+    "test": "node --test test/invitations.test.js test/ui-smoke.test.js"
   },
   "engines": {
     "node": ">=16"
