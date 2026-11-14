@@ -1,6 +1,7 @@
 services:
   - type: web
     name: organizat
+    plan: free
     runtime: node
     buildCommand: npm install
     startCommand: npm start
