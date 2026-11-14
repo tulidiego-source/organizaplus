@@ -35,7 +35,16 @@ $env:HOST = "0.0.0.0"
 npm start
 ```
 
-Configura el proxy o plataforma de alojamiento para enviar tanto la web como las rutas `/api/` al proceso Node.js. Los eventos se almacenan en `data/invitations.json`; esa carpeta está excluida de Git. Conserva una copia de ese archivo al hacer copias de seguridad.
+Configura el proxy o plataforma de alojamiento para enviar tanto la web como las rutas `/api/` al proceso Node.js. En local, los eventos se almacenan en `data/invitations.json`; esa carpeta está excluida de Git. Para producción, configura `DATABASE_URL` con la cadena de conexión de PostgreSQL y OrganizaT creará la tabla `invitation_events` automáticamente. Puedes desactivar SSL solo en una base local con `DATABASE_SSL=false`.
+
+Ejemplo de configuración de producción:
+
+```powershell
+$env:DATABASE_URL = "postgresql://usuario:contraseña@servidor:5432/organizat"
+$env:PUBLIC_APP_URL = "https://eventos.ejemplo.com"
+$env:HOST = "0.0.0.0"
+npm start
+```
 
 ## Probar
 

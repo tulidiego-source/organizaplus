@@ -2,6 +2,9 @@
   "name": "organizat",
   "version": "1.0.0",
   "private": true,
+  "dependencies": {
+    "pg": "^8.13.1"
+  },
   "scripts": {
     "start": "node server.js",
     "test": "node --test test/invitations.test.js test/ui-smoke.test.js"

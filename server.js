@@ -223,6 +223,15 @@ function createEventRecord(body) {
 
 function createAppServer(options = {}) {
   const databaseFile = options.databaseFile || defaultDatabaseFile;
+  const databaseUrl = options.databaseUrl || process.env.DATABASE_URL || '';
+  let pool = null;
+  if (databaseUrl) {
+    const { Pool } = require('pg');
+    pool = new Pool({
+      connectionString: databaseUrl,
+      ssl: process.env.DATABASE_SSL === 'false' ? false : { rejectUnauthorized: false }
+    });
+  }
   const configuredUrl = options.publicAppUrl || process.env.PUBLIC_APP_URL || '';
   let configuredBaseUrl = null;
   if (configuredUrl) {
@@ -237,6 +246,48 @@ function createAppServer(options = {}) {
   let mutationQueue = Promise.resolve();
 
   async function loadStore() {
+    if (pool) {
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS invitation_events (
+          id TEXT PRIMARY KEY,
+          client_event_id TEXT NOT NULL UNIQUE,
+          token TEXT NOT NULL UNIQUE,
+          owner_token TEXT,
+          event JSONB NOT NULL,
+          attendees JSONB NOT NULL,
+          tasks JSONB NOT NULL,
+          date_options JSONB NOT NULL,
+          expenses JSONB NOT NULL DEFAULT '[]'::jsonb,
+          created_at TIMESTAMPTZ NOT NULL
+        )
+      `);
+      const result = await pool.query('SELECT id, client_event_id, token, owner_token, event, attendees, tasks, date_options, expenses, created_at FROM invitation_events ORDER BY created_at');
+      records = result.rows.map(row => ({
+        id: row.id,
+        clientEventId: row.client_event_id,
+        token: row.token,
+        ownerToken: row.owner_token,
+        event: row.event,
+        attendees: row.attendees,
+        tasks: row.tasks,
+        dateOptions: row.date_options,
+        expenses: row.expenses || [],
+        createdAt: new Date(row.created_at).toISOString()
+      }));
+      if (!records.length) {
+        try {
+          const contents = await fs.readFile(databaseFile, 'utf8');
+          const parsed = JSON.parse(contents);
+          if (Array.isArray(parsed.events) && parsed.events.length) {
+            records = parsed.events;
+            await saveStore();
+          }
+        } catch (error) {
+          if (error.code !== 'ENOENT') throw error;
+        }
+      }
+      return;
+    }
     try {
       const contents = await fs.readFile(databaseFile, 'utf8');
       const parsed = JSON.parse(contents);
@@ -249,6 +300,46 @@ function createAppServer(options = {}) {
   }
 
   async function saveStore() {
+    if (pool) {
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+        for (const record of records) {
+          await client.query(`
+            INSERT INTO invitation_events
+              (id, client_event_id, token, owner_token, event, attendees, tasks, date_options, expenses, created_at)
+            VALUES ($1, $2, $3, $4, $5::jsonb, $6::jsonb, $7::jsonb, $8::jsonb, $9::jsonb, $10)
+            ON CONFLICT (id) DO UPDATE SET
+              client_event_id = EXCLUDED.client_event_id,
+              token = EXCLUDED.token,
+              owner_token = EXCLUDED.owner_token,
+              event = EXCLUDED.event,
+              attendees = EXCLUDED.attendees,
+              tasks = EXCLUDED.tasks,
+              date_options = EXCLUDED.date_options,
+              expenses = EXCLUDED.expenses
+          `, [
+            record.id,
+            record.clientEventId,
+            record.token,
+            record.ownerToken || null,
+            JSON.stringify(record.event),
+            JSON.stringify(record.attendees),
+            JSON.stringify(record.tasks),
+            JSON.stringify(record.dateOptions),
+            JSON.stringify(record.expenses || []),
+            record.createdAt
+          ]);
+        }
+        await client.query('COMMIT');
+      } catch (error) {
+        await client.query('ROLLBACK');
+        throw error;
+      } finally {
+        client.release();
+      }
+      return;
+    }
     await fs.mkdir(path.dirname(databaseFile), { recursive: true });
     const temporaryFile = `${databaseFile}.${process.pid}.${crypto.randomBytes(4).toString('hex')}.tmp`;
     await fs.writeFile(temporaryFile, JSON.stringify({ version: 1, events: records }, null, 2), 'utf8');
