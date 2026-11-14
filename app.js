@@ -618,13 +618,17 @@ function capitalize(value) {
 }
 
 function setTab(tab) {
-  const isDefaultTab = ['overview', 'attendees', 'tasks', 'expenses'].includes(tab);
-  const isInboxTab = tab === 'inbox';
-  currentTab = isDefaultTab ? tab : 'overview';
-  if (isInboxTab) currentTab = 'inbox';
-  $('#plan-panel').classList.toggle('hidden', currentTab !== 'overview');
-  $('.date-panel').classList.toggle('hidden', currentTab !== 'overview');
-  $('.attendees-panel').classList.toggle('hidden', currentTab !== 'overview');
+  const validTabs = ['events', 'overview', 'attendees', 'tasks', 'expenses', 'inbox'];
+  currentTab = validTabs.includes(tab) ? tab : 'overview';
+  const showOverview = currentTab === 'overview';
+  const showEventGallery = currentTab === 'overview' || currentTab === 'events';
+  $('#event-gallery').classList.toggle('hidden', !showEventGallery);
+  $('.event-hero').classList.toggle('hidden', !showOverview);
+  $('.event-status').classList.toggle('hidden', !showOverview);
+  $('.content-grid').classList.toggle('hidden', !showOverview);
+  $('#plan-panel').classList.toggle('hidden', !showOverview);
+  $('.date-panel').classList.toggle('hidden', !showOverview);
+  $('.attendees-panel').classList.toggle('hidden', !showOverview);
   $('#attendees-view').classList.toggle('hidden', currentTab !== 'attendees');
   $('#tasks-view').classList.toggle('hidden', currentTab !== 'tasks');
   $('#expenses-view').classList.toggle('hidden', currentTab !== 'expenses');
