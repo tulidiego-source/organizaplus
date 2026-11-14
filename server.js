@@ -355,6 +355,7 @@ function createAppServer(options = {}) {
   }
 
   let records = [];
+  let startupDatabaseError = null;
   let mutationQueue = Promise.resolve();
 
   async function loadStore() {
@@ -493,6 +494,15 @@ function createAppServer(options = {}) {
     if (request.method === 'GET' && url.pathname === '/api/health') {
       if (!pool) {
         sendJson(response, 200, { ok: true, database: 'json', authentication: false });
+        return;
+      }
+      if (startupDatabaseError) {
+        sendJson(response, 503, {
+          ok: false,
+          database: 'postgresql',
+          authentication: true,
+          error: 'No se pudo conectar con la base de datos configurada.'
+        });
         return;
       }
       await pool.query('SELECT 1');
@@ -721,7 +731,11 @@ function createAppServer(options = {}) {
     });
   });
 
-  server.ready = loadStore();
+  server.ready = loadStore().catch(error => {
+    startupDatabaseError = error;
+    records = [];
+    console.error('No se pudo cargar el almacenamiento de invitaciones.', error);
+  });
   return server;
 }
 
@@ -734,7 +748,7 @@ if (require.main === module) {
       console.log(`OrganizaT disponible en http://${host}:${port}`);
     });
   }).catch(error => {
-    console.error('No se pudo cargar el almacenamiento de invitaciones.', error);
+    console.error('No se pudo iniciar OrganizaT.', error);
     process.exitCode = 1;
   });
 }
