@@ -9,7 +9,5 @@ services:
         sync: false
       - key: DATABASE_SSL
         value: "true"
-      - key: PUBLIC_APP_URL
-        sync: false
       - key: HOST
         value: "0.0.0.0"
