@@ -167,6 +167,29 @@ test('shared tasks, votes and expenses survive an invitation state update', asyn
   }
 });
 
+test('the organizer can delete an invitation but an unauthorized request cannot', async () => {
+  const context = await startTestServer();
+  try {
+    const created = await requestJson(context.baseUrl, '/api/events', 'POST', invitationPayload());
+    const token = created.body.inviteToken;
+
+    const unauthorized = await requestJson(context.baseUrl, `/api/invitations/${token}`, 'DELETE', undefined, {
+      'X-Organizer-Token': 'invalid-token'
+    });
+    assert.equal(unauthorized.status, 403);
+
+    const deleted = await requestJson(context.baseUrl, `/api/invitations/${token}`, 'DELETE', undefined, {
+      'X-Organizer-Token': created.body.ownerToken
+    });
+    assert.equal(deleted.status, 200);
+
+    const missing = await requestJson(context.baseUrl, `/api/invitations/${token}`, 'GET');
+    assert.equal(missing.status, 404);
+  } finally {
+    await context.cleanup();
+  }
+});
+
 test('only the organizer token can update shared event state', async () => {
   const context = await startTestServer();
   try {

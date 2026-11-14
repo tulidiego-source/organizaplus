@@ -381,6 +381,23 @@ function createAppServer(options = {}) {
       return;
     }
 
+    const deleteMatch = url.pathname.match(/^\/api\/invitations\/([A-Za-z0-9_-]{32})$/);
+    if (request.method === 'DELETE' && deleteMatch) {
+      const result = await mutateStore(async () => {
+        const index = records.findIndex(item => item.token === deleteMatch[1]);
+        if (index < 0) throw new HttpError(404, 'La invitación no existe o ha caducado.');
+        const record = records[index];
+        if (!record.ownerToken || request.headers['x-organizer-token'] !== record.ownerToken) {
+          throw new HttpError(403, 'No tienes permiso para eliminar este evento.');
+        }
+        records.splice(index, 1);
+        if (pool) await pool.query('DELETE FROM invitation_events WHERE id = $1', [record.id]);
+        return { deleted: true };
+      });
+      sendJson(response, 200, result);
+      return;
+    }
+
     const inviteMatch = url.pathname.match(/^\/api\/invitations\/([A-Za-z0-9_-]{32})$/);
     if (request.method === 'GET' && inviteMatch) {
       const record = records.find(item => item.token === inviteMatch[1]);

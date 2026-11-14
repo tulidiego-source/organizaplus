@@ -299,6 +299,34 @@ function activateEvent(event) {
   return saved;
 }
 
+async function deleteCurrentEvent() {
+  if (eventTemplates.length <= 1) {
+    showToast('Debe quedar al menos un evento en la aplicación.');
+    return;
+  }
+  if (!window.confirm(`¿Quieres eliminar «${currentEvent.name}»? Esta acción no se puede deshacer.`)) return;
+
+  try {
+    if (currentEvent.inviteToken) {
+      await requestApi(`/api/invitations/${encodeURIComponent(currentEvent.inviteToken)}`, {
+        method: 'DELETE',
+        headers: { 'X-Organizer-Token': currentEvent.ownerToken || '' }
+      });
+    }
+    const deletedId = currentEvent.id;
+    eventTemplates = eventTemplates.filter(event => event.id !== deletedId);
+    delete eventStates[deletedId];
+    currentEvent = eventTemplates[0];
+    restoreEventData(currentEvent.id);
+    renderAll();
+    persistAppState();
+    showToast('Evento eliminado.');
+  } catch (error) {
+    console.error('Unable to delete event.', error);
+    showToast(error.message);
+  }
+}
+
 function getEventStatePayload() {
   saveCurrentEventData();
   return eventStates[currentEvent.id];
@@ -737,6 +765,7 @@ $('#open-expense-modal').addEventListener('click', () => openDialog('#expense-mo
 $('#invite-button').addEventListener('click', openInviteFlow);
 $('#share-button').addEventListener('click', openInviteFlow);
 $('#create-event-button').addEventListener('click', startEventWizard);
+$('#delete-event-button').addEventListener('click', deleteCurrentEvent);
 $$('.modal-close').forEach(button => button.addEventListener('click', () => button.closest('dialog').close()));
 
 function localDateAfter(days) {
