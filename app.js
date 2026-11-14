@@ -104,8 +104,17 @@ async function requestApi(route, options = {}) {
 
   let result;
   try {
+    const contentType = response.headers.get('content-type') || '';
+    if (!contentType.toLowerCase().includes('application/json')) {
+      const error = new Error(response.status === 404
+        ? 'Esta publicación solo sirve archivos estáticos. El registro necesita ejecutar el servidor Node de OrganizaT.'
+        : 'El servidor de OrganizaT no devolvió una respuesta válida.');
+      error.status = response.status;
+      throw error;
+    }
     result = await response.json();
   } catch (error) {
+    if (error.status) throw error;
     throw new Error('El servidor de invitaciones devolvió una respuesta no válida.');
   }
   if (!response.ok) {
@@ -1192,6 +1201,10 @@ async function completeEventWizard() {
     invitees: wizardInvitees.slice()
   };
   saveCurrentEventData();
+  if (eventTemplates.some(event => event.id === 'empty-workspace')) {
+    eventTemplates = eventTemplates.filter(event => event.id !== 'empty-workspace');
+    delete eventStates['empty-workspace'];
+  }
   eventTemplates.unshift(newEvent);
   currentEvent = newEvent;
   attendees = [organizer, ...invitees];

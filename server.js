@@ -2,10 +2,19 @@
 
 const crypto = require('node:crypto');
 const fs = require('node:fs/promises');
+const fsSync = require('node:fs');
 const http = require('node:http');
 const path = require('node:path');
 
 const rootDirectory = __dirname;
+const envFilePath = path.join(rootDirectory, '.env');
+if (fsSync.existsSync(envFilePath)) {
+  for (const line of fsSync.readFileSync(envFilePath, 'utf8').split(/\r?\n/)) {
+    const match = line.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*?)\s*$/);
+    if (!match || match[1].startsWith('#') || process.env[match[1]]) continue;
+    process.env[match[1]] = match[2].replace(/^(['"])(.*)\1$/, '$2');
+  }
+}
 const defaultDatabaseFile = path.join(rootDirectory, 'data', 'invitations.json');
 const maximumRequestBytes = 32 * 1024;
 const sessionDurationSeconds = 60 * 60 * 24 * 30;
@@ -473,6 +482,16 @@ function createAppServer(options = {}) {
   }
 
   async function handleApi(request, response, url) {
+    if (request.method === 'GET' && url.pathname === '/api/health') {
+      if (!pool) {
+        sendJson(response, 200, { ok: true, database: 'json', authentication: false });
+        return;
+      }
+      await pool.query('SELECT 1');
+      sendJson(response, 200, { ok: true, database: 'postgresql', authentication: true });
+      return;
+    }
+
     if (request.method === 'POST' && url.pathname === '/api/auth/register') {
       if (!pool) throw new HttpError(503, 'La autenticación necesita DATABASE_URL configurado.');
       const body = await readJsonBody(request);

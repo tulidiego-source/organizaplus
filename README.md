@@ -65,3 +65,11 @@ Para probarlo desde cero:
 3. Abre `http://localhost:3000`, pulsa «Regístrate» y crea una cuenta.
 4. Crea un evento; se guardará automáticamente en Supabase.
 5. Cierra el navegador, vuelve a abrir la aplicación o entra desde otro dispositivo y utiliza «Inicia sesión».
+
+También puedes copiar `.env.example` como `.env` y completar `DATABASE_URL`. El archivo `.env` está excluido de Git y nunca debes subirlo porque contiene la contraseña de la base de datos.
+
+Puedes comprobar la conexión publicada abriendo `https://TU-DOMINIO/api/health`. Debe responder `{"ok":true,"database":"postgresql","authentication":true}`. Si devuelve `json`, el hosting todavía no tiene configurada `DATABASE_URL`.
+
+## Publicar la aplicación completa
+
+GitHub Pages solo sirve `index.html`, `app.js` y `styles.css`; no ejecuta `server.js`, por lo que no puede ofrecer registro, login ni persistencia. Para una publicación funcional usa un servicio Node, por ejemplo Render. El archivo `render.yaml` ya incluye el comando de instalación y arranque. Al crear el servicio, configura `DATABASE_URL`, `DATABASE_SSL=true` y `PUBLIC_APP_URL` con la URL pública que te asigne el servicio. Después de cada cambio, vuelve a desplegar el servicio Node.

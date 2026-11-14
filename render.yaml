@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: organizat
+    runtime: node
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: DATABASE_SSL
+        value: "true"
+      - key: PUBLIC_APP_URL
+        sync: false
+      - key: HOST
+        value: "0.0.0.0"

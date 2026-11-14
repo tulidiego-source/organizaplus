@@ -128,6 +128,16 @@ test('guests can join with an invite token and the roster survives a restart', a
   }
 });
 
+test('the health endpoint reports the local storage mode without database credentials', async () => {
+  const context = await startTestServer();
+  try {
+    const health = await requestJson(context.baseUrl, '/api/health', 'GET');
+    assert.deepEqual(health.body, { ok: true, database: 'json', authentication: false });
+  } finally {
+    await context.cleanup();
+  }
+});
+
 test('the invitation prevents duplicate names and enforces the event capacity', async () => {
   const context = await startTestServer();
   try {
