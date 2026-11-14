@@ -37,7 +37,7 @@
           <p>Organizarlo juntos es más fácil.</p>
           <button class="text-button" data-tab="tasks">Ver cómo funciona <span>→</span></button>
         </div>
-        <button class="profile-button">
+        <button class="profile-button" id="logout-button" title="Cerrar sesión">
           <span class="avatar avatar-me">D</span>
           <span class="profile-copy"><strong>Diego Navarro</strong><small>Organizador</small></span>
           <span class="profile-more">···</span>
@@ -177,6 +177,23 @@
   </div>
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <dialog class="app-modal auth-modal" id="auth-modal">
+    <form method="dialog" class="modal-form" id="auth-form">
+      <span class="section-eyebrow">TU ESPACIO ORGANIZADO</span>
+      <h2 id="auth-title">Inicia sesión</h2>
+      <p id="auth-description">Accede a tus eventos desde cualquier dispositivo.</p>
+      <label class="auth-name-field hidden" for="auth-name">Tu nombre</label>
+      <input class="auth-name-field hidden" id="auth-name" name="name" maxlength="60" autocomplete="name" placeholder="Ej. Diego Navarro">
+      <label for="auth-email">Correo electrónico</label>
+      <input id="auth-email" name="email" type="email" required autocomplete="email" placeholder="tu@email.com">
+      <label for="auth-password">Contraseña</label>
+      <input id="auth-password" name="password" type="password" required minlength="8" autocomplete="current-password" placeholder="Mínimo 8 caracteres">
+      <p class="auth-feedback" id="auth-feedback" role="status" aria-live="polite"></p>
+      <button class="primary-button modal-submit" id="auth-submit" type="submit">Entrar <span>→</span></button>
+      <button class="auth-toggle" id="auth-toggle" type="button">¿No tienes cuenta? Regístrate</button>
+    </form>
+  </dialog>
 
   <dialog class="app-modal event-actions-modal" id="event-actions-modal">
     <form method="dialog" class="modal-form">

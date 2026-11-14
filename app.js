@@ -85,6 +85,8 @@ let activeInviteToken = '';
 let inviteRefreshInProgress = false;
 let remoteStateSyncInProgress = false;
 let remoteStateSyncQueued = false;
+let authUser = null;
+let authMode = 'login';
 
 async function requestApi(route, options = {}) {
   let response;
@@ -106,7 +108,11 @@ async function requestApi(route, options = {}) {
   } catch (error) {
     throw new Error('El servidor de invitaciones devolvió una respuesta no válida.');
   }
-  if (!response.ok) throw new Error(result.error || 'No se pudo completar la solicitud.');
+  if (!response.ok) {
+    const error = new Error(result.error || 'No se pudo completar la solicitud.');
+    error.status = response.status;
+    throw error;
+  }
   return result;
 }
 
@@ -299,9 +305,89 @@ function activateEvent(event) {
   return saved;
 }
 
+function createEmptyWorkspaceEvent() {
+  return {
+    id: 'empty-workspace',
+    name: 'Aún no tienes eventos',
+    type: 'Organización',
+    date: '2099-01-01',
+    time: '14:00',
+    location: 'Crea tu primer evento',
+    description: 'Pulsa «Crear evento» para empezar a organizar tu próximo plan.',
+    badge: 'TU ESPACIO',
+    capacity: 200,
+    allowGuests: false
+  };
+}
+
+function showEmptyWorkspace() {
+  const emptyEvent = createEmptyWorkspaceEvent();
+  eventTemplates = [emptyEvent];
+  eventStates = { [emptyEvent.id]: createEmptyEventState(emptyEvent) };
+  currentEvent = emptyEvent;
+  restoreEventData(emptyEvent.id);
+  renderAll();
+  persistAppState();
+}
+
+async function loadOwnedEvents() {
+  const result = await requestApi('/api/events');
+  if (!result.events.length) {
+    showEmptyWorkspace();
+    return;
+  }
+  eventTemplates = result.events;
+  eventStates = {};
+  result.events.forEach(event => {
+    eventStates[event.id] = {
+      attendees: cloneData(event.attendees || []),
+      tasks: cloneData(event.tasks || []),
+      expenses: cloneData(event.expenses || []),
+      dateOptions: cloneData(event.dateOptions || []),
+      selectedDate: event.date,
+      currentVote: ''
+    };
+  });
+  currentEvent = eventTemplates[0];
+  restoreEventData(currentEvent.id);
+  renderAll();
+  persistAppState();
+}
+
+function setAuthMode(mode) {
+  authMode = mode;
+  const registering = mode === 'register';
+  $('#auth-title').textContent = registering ? 'Crea tu cuenta' : 'Inicia sesión';
+  $('#auth-description').textContent = registering ? 'Guarda tus eventos y accede a ellos desde cualquier dispositivo.' : 'Accede a tus eventos desde cualquier dispositivo.';
+  $$('.auth-name-field').forEach(field => field.classList.toggle('hidden', !registering));
+  $('#auth-name').required = registering;
+  $('#auth-password').autocomplete = registering ? 'new-password' : 'current-password';
+  $('#auth-submit').innerHTML = registering ? 'Crear cuenta <span>✓</span>' : 'Entrar <span>→</span>';
+  $('#auth-toggle').textContent = registering ? '¿Ya tienes cuenta? Inicia sesión' : '¿No tienes cuenta? Regístrate';
+  $('#auth-feedback').textContent = '';
+}
+
+async function bootstrapAuth() {
+  if (/^\/join\//.test(window.location.pathname)) return;
+  try {
+    const result = await requestApi('/api/auth/me');
+    authUser = result.user;
+    const profileName = $('.profile-copy strong');
+    if (profileName) profileName.textContent = authUser.name;
+    await loadOwnedEvents();
+  } catch (error) {
+    if (error.status === 401) {
+      setAuthMode('login');
+      openDialog('#auth-modal');
+    } else {
+      showToast(error.message);
+    }
+  }
+}
+
 async function deleteCurrentEvent() {
-  if (eventTemplates.length <= 1) {
-    showToast('Debe quedar al menos un evento en la aplicación.');
+  if (currentEvent.id === 'empty-workspace') {
+    showToast('Crea primero un evento para poder eliminarlo.');
     return;
   }
 
@@ -316,10 +402,14 @@ async function deleteCurrentEvent() {
     const deletedId = currentEvent.id;
     eventTemplates = eventTemplates.filter(event => event.id !== deletedId);
     delete eventStates[deletedId];
-    currentEvent = eventTemplates[0];
-    restoreEventData(currentEvent.id);
-    renderAll();
-    persistAppState();
+    if (!eventTemplates.length) {
+      showEmptyWorkspace();
+    } else {
+      currentEvent = eventTemplates[0];
+      restoreEventData(currentEvent.id);
+      renderAll();
+      persistAppState();
+    }
     $('#delete-confirm-modal').close();
     showToast('Evento eliminado.');
   } catch (error) {
@@ -347,6 +437,9 @@ function getEventStatePayload() {
 }
 
 async function ensureRemoteInvitation() {
+  if (currentEvent.id === 'empty-workspace') {
+    throw new Error('Crea primero un evento para poder compartirlo.');
+  }
   if (currentEvent.inviteToken && currentEvent.inviteUrl && currentEvent.ownerToken) {
     return { inviteToken: currentEvent.inviteToken, inviteUrl: currentEvent.inviteUrl, ownerToken: currentEvent.ownerToken };
   }
@@ -598,6 +691,8 @@ function populatePeopleOptions() {
 function renderEventGallery() {
   const gallery = $('#event-gallery');
   if (!gallery) return;
+  const eventCount = $('.main-nav .nav-count');
+  if (eventCount) eventCount.textContent = eventTemplates[0]?.id === 'empty-workspace' ? '0' : String(eventTemplates.length);
   gallery.innerHTML = eventTemplates.map(event => `
     <button class="event-gallery-card ${event.id === currentEvent.id ? 'active' : ''}" data-event-id="${event.id}" type="button">
       <span class="tag">${escapeHtml(event.badge)}</span>
@@ -784,6 +879,44 @@ $('#open-delete-confirm').addEventListener('click', openDeleteConfirmation);
 $('#cancel-delete').addEventListener('click', () => $('#delete-confirm-modal').close());
 $('#confirm-delete').addEventListener('click', deleteCurrentEvent);
 $$('.modal-close').forEach(button => button.addEventListener('click', () => button.closest('dialog').close()));
+
+$('#auth-toggle').addEventListener('click', () => setAuthMode(authMode === 'login' ? 'register' : 'login'));
+$('#auth-form').addEventListener('submit', async event => {
+  event.preventDefault();
+  const form = new FormData(event.currentTarget);
+  const submitButton = $('#auth-submit');
+  submitButton.disabled = true;
+  $('#auth-feedback').textContent = authMode === 'register' ? 'Creando tu cuenta…' : 'Comprobando tus datos…';
+  try {
+    const result = await requestApi(`/api/auth/${authMode}`, {
+      method: 'POST',
+      body: JSON.stringify({ name: form.get('name'), email: form.get('email'), password: form.get('password') })
+    });
+    authUser = result.user;
+    const profileName = $('.profile-copy strong');
+    if (profileName) profileName.textContent = authUser.name;
+    $('#auth-modal').close();
+    await loadOwnedEvents();
+    showToast(`Bienvenido, ${authUser.name}.`);
+  } catch (error) {
+    $('#auth-feedback').textContent = error.message;
+  } finally {
+    submitButton.disabled = false;
+  }
+});
+
+$('#logout-button').addEventListener('click', async () => {
+  try {
+    await requestApi('/api/auth/logout', { method: 'POST', body: JSON.stringify({}) });
+  } catch (error) {
+    console.error('Unable to close the organizer session.', error);
+  }
+  authUser = null;
+  try { localStorage.removeItem(storageKey); } catch (error) { console.error('Unable to clear local organizer data.', error); }
+  showEmptyWorkspace();
+  setAuthMode('login');
+  openDialog('#auth-modal');
+});
 
 function localDateAfter(days) {
   const date = new Date();
@@ -978,11 +1111,12 @@ $('#add-wizard-date').addEventListener('click', () => {
 function renderWizardTasks() {
   const list = $('#wizard-task-list');
   const inviteOptions = wizardInvitees.map(email => `<option value="${escapeHtml(email)}">${escapeHtml(email)}</option>`).join('');
+  const organizerName = authUser?.name || 'Diego Navarro';
   list.innerHTML = wizardTasks.map((task, index) => `
     <div class="wizard-task-row" data-wizard-task-index="${index}">
       <label>Qué hay que llevar<input name="task-name" maxlength="50" value="${escapeHtml(task.name)}" placeholder="Ej. Hielo"></label>
       <label>Cantidad<input name="task-quantity" maxlength="30" value="${escapeHtml(task.quantity)}" placeholder="Ej. 2 bolsas"></label>
-      <label>Responsable<select name="task-person"><option value="">Pendiente</option><option value="Diego Navarro" ${task.person === 'Diego Navarro' ? 'selected' : ''}>Diego Navarro</option>${inviteOptions.replace(`value="${escapeHtml(task.person)}"`, `value="${escapeHtml(task.person)}" selected`)}</select></label>
+      <label>Responsable<select name="task-person"><option value="">Pendiente</option><option value="${escapeHtml(organizerName)}" ${task.person === organizerName ? 'selected' : ''}>${escapeHtml(organizerName)}</option>${inviteOptions.replace(`value="${escapeHtml(task.person)}"`, `value="${escapeHtml(task.person)}" selected`)}</select></label>
       <button class="remove-wizard-row" type="button" data-remove-task="${index}" aria-label="Quitar tarea">×</button>
     </div>`).join('');
 }
@@ -1010,7 +1144,7 @@ $('#add-wizard-task').addEventListener('click', () => {
   $('#wizard-task-list .wizard-task-row:last-child input[name="task-name"]').focus();
 });
 
-function completeEventWizard() {
+async function completeEventWizard() {
   if (!validateWizardStep()) return;
   const form = new FormData($('#event-form'));
   const chosenVote = $('#wizard-vote-choice input:checked').value;
@@ -1030,7 +1164,8 @@ function completeEventWizard() {
   const type = String(form.get('type') || 'Evento');
   const description = String(form.get('description') || '').trim();
   const location = String(form.get('location') || '').trim();
-  const organizer = { name: 'Diego Navarro', initial: 'D', role: 'Organizador', status: 'Confirmado', color: '#e9c3aa' };
+  const organizerName = authUser?.name || 'Diego Navarro';
+  const organizer = { name: organizerName, initial: initials(organizerName), role: 'Organizador', status: 'Confirmado', color: '#e9c3aa' };
   const invitees = wizardInvitees.map((email, index) => {
     const localName = email.split('@')[0].replace(/[._-]+/g, ' ').trim();
     const inviteeName = localName.replace(/\b\w/g, character => character.toUpperCase()) || email;
@@ -1063,7 +1198,7 @@ function completeEventWizard() {
   tasks = wizardTasks.filter(task => task.name.trim()).map(task => ({
     name: task.name.trim(),
     quantity: task.quantity.trim(),
-    person: task.person && task.person !== 'Diego Navarro'
+    person: task.person && task.person !== organizerName
       ? invitees.find(person => person.email === task.person)?.name || ''
       : task.person,
     done: false
@@ -1079,9 +1214,24 @@ function completeEventWizard() {
   $('#add-vote-button').textContent = 'Votado ✓';
   renderAll();
   const saved = persistAppState();
+  const finishButton = $('#wizard-finish');
+  finishButton.disabled = true;
+  let remoteSaved = false;
+  try {
+    if (authUser) {
+      await ensureRemoteInvitation();
+      remoteSaved = true;
+    }
+  } catch (error) {
+    console.error('Unable to save the new event remotely.', error);
+    showToast(`Guardado en este dispositivo. ${error.message}`);
+  } finally {
+    finishButton.disabled = false;
+  }
   $('#event-modal').close();
   setTab('overview');
-  if (saved) showToast(`¡Listo! ${name} ya tiene invitaciones, fechas y lista de cosas.`);
+  if (saved && remoteSaved) showToast(`¡Listo! ${name} ya está guardado en tu cuenta.`);
+  else if (saved && !authUser) showToast(`¡Listo! ${name} está guardado localmente.`);
 }
 
 $('#wizard-finish').addEventListener('click', completeEventWizard);
@@ -1252,6 +1402,7 @@ function renderAll() {
 
 loadPersistedData();
 renderAll();
+bootstrapAuth();
 loadInvitationFromLink();
 window.setInterval(() => {
   if (currentEvent.inviteToken) refreshRemoteAttendees();

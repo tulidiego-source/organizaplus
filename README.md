@@ -52,4 +52,16 @@ npm start
 npm test
 ```
 
-Las confirmaciones de asistencia se comparten por la API; las tareas, votaciones y gastos siguen siendo datos locales del navegador. Esta versión no tiene cuentas de usuario: quien tenga el enlace de invitación puede ver el plan y unirse.
+## Cuentas y eventos
+
+Con `DATABASE_URL` configurado, OrganizaT crea automáticamente las tablas `organizers`, `organizer_sessions` e `invitation_events`. La pantalla principal requiere una cuenta de organizador: puedes registrarte desde la aplicación, iniciar sesión y recuperar tus eventos desde otro navegador o dispositivo. Las contraseñas se guardan como hashes `scrypt` y la sesión se mantiene mediante una cookie HttpOnly.
+
+Los invitados no necesitan cuenta: siguen accediendo mediante el enlace `/join/...` y pueden confirmar su asistencia. Las invitaciones, tareas, votaciones y gastos del evento se guardan en PostgreSQL.
+
+Para probarlo desde cero:
+
+1. Configura `DATABASE_URL` y `DATABASE_SSL=true` en la misma sesión de PowerShell.
+2. Ejecuta `npm start`.
+3. Abre `http://localhost:3000`, pulsa «Regístrate» y crea una cuenta.
+4. Crea un evento; se guardará automáticamente en Supabase.
+5. Cierra el navegador, vuelve a abrir la aplicación o entra desde otro dispositivo y utiliza «Inicia sesión».

@@ -8,6 +8,7 @@ const path = require('node:path');
 const rootDirectory = __dirname;
 const defaultDatabaseFile = path.join(rootDirectory, 'data', 'invitations.json');
 const maximumRequestBytes = 32 * 1024;
+const sessionDurationSeconds = 60 * 60 * 24 * 30;
 const allowedStaticFiles = new Map([
   ['/', ['index.html', 'text/html; charset=utf-8']],
   ['/index.html', ['index.html', 'text/html; charset=utf-8']],
@@ -139,6 +140,61 @@ function publicInvitation(record) {
   };
 }
 
+function normalizeEmail(value) {
+  if (typeof value !== 'string') throw new HttpError(400, 'El correo electrónico no es válido.');
+  const email = value.trim().toLowerCase();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254) {
+    throw new HttpError(400, 'Introduce un correo electrónico válido.');
+  }
+  return email;
+}
+
+function validatePassword(value) {
+  if (typeof value !== 'string' || value.length < 8 || value.length > 200) {
+    throw new HttpError(400, 'La contraseña debe tener entre 8 y 200 caracteres.');
+  }
+  return value;
+}
+
+function hashPassword(password) {
+  const salt = crypto.randomBytes(16).toString('hex');
+  return new Promise((resolve, reject) => {
+    crypto.scrypt(password, salt, 64, (error, derivedKey) => {
+      if (error) return reject(error);
+      resolve(`scrypt:${salt}:${derivedKey.toString('hex')}`);
+    });
+  });
+}
+
+function verifyPassword(password, storedHash) {
+  const [algorithm, salt, expectedHex] = String(storedHash || '').split(':');
+  if (algorithm !== 'scrypt' || !salt || !/^[a-f\d]{128}$/i.test(expectedHex || '')) return Promise.resolve(false);
+  return new Promise((resolve, reject) => {
+    crypto.scrypt(password, salt, 64, (error, derivedKey) => {
+      if (error) return reject(error);
+      const expected = Buffer.from(expectedHex, 'hex');
+      resolve(expected.length === derivedKey.length && crypto.timingSafeEqual(expected, derivedKey));
+    });
+  });
+}
+
+function parseCookies(request) {
+  return String(request.headers.cookie || '').split(';').reduce((cookies, part) => {
+    const separator = part.indexOf('=');
+    if (separator < 0) return cookies;
+    cookies[part.slice(0, separator).trim()] = decodeURIComponent(part.slice(separator + 1).trim());
+    return cookies;
+  }, {});
+}
+
+function hashSessionToken(token) {
+  return crypto.createHash('sha256').update(token).digest('hex');
+}
+
+function sessionCookie(token, maxAge = sessionDurationSeconds) {
+  return `organizat_session=${encodeURIComponent(token)}; HttpOnly; Path=/; SameSite=Lax; Max-Age=${maxAge}`;
+}
+
 async function readJsonBody(request) {
   if (!String(request.headers['content-type'] || '').toLowerCase().includes('application/json')) {
     throw new HttpError(415, 'Se esperaba una solicitud JSON.');
@@ -158,11 +214,12 @@ async function readJsonBody(request) {
   }
 }
 
-function sendJson(response, status, value) {
+function sendJson(response, status, value, headers = {}) {
   response.writeHead(status, {
     'Content-Type': 'application/json; charset=utf-8',
     'Cache-Control': 'no-store',
-    'X-Content-Type-Options': 'nosniff'
+    'X-Content-Type-Options': 'nosniff',
+    ...headers
   });
   response.end(JSON.stringify(value));
 }
@@ -177,7 +234,7 @@ function getPublicBaseUrl(request, configuredBaseUrl) {
   return `${protocol}://${host}`;
 }
 
-function createEventRecord(body) {
+function createEventRecord(body, ownerUserId = null) {
   if (!body || typeof body !== 'object' || !/^[A-Za-z0-9_-]{1,80}$/.test(body.clientEventId || '')) {
     throw new HttpError(400, 'El identificador del evento no es válido.');
   }
@@ -212,6 +269,7 @@ function createEventRecord(body) {
     clientEventId: body.clientEventId,
     token: crypto.randomBytes(24).toString('base64url'),
     ownerToken: crypto.randomBytes(24).toString('base64url'),
+    ownerUserId,
     event,
     attendees,
     tasks: normalizeTasks(body.tasks),
@@ -232,6 +290,43 @@ function createAppServer(options = {}) {
       ssl: process.env.DATABASE_SSL === 'false' ? false : { rejectUnauthorized: false }
     });
   }
+
+  async function getAuthenticatedUser(request) {
+    if (!pool) return null;
+    const rawToken = parseCookies(request).organizat_session;
+    if (!rawToken) return null;
+    const result = await pool.query(`
+      SELECT o.id, o.email, o.name
+      FROM organizer_sessions s
+      JOIN organizers o ON o.id = s.user_id
+      WHERE s.token_hash = $1 AND s.expires_at > NOW()
+    `, [hashSessionToken(rawToken)]);
+    return result.rows[0] || null;
+  }
+
+  async function createSession(userId) {
+    const token = crypto.randomBytes(32).toString('base64url');
+    await pool.query(
+      'INSERT INTO organizer_sessions (token_hash, user_id, expires_at) VALUES ($1, $2, NOW() + INTERVAL \'30 days\')',
+      [hashSessionToken(token), userId]
+    );
+    return token;
+  }
+
+  function organizerEvent(record, request) {
+    const baseUrl = getPublicBaseUrl(request, configuredBaseUrl);
+    return {
+      ...record.event,
+      id: record.event.id || record.clientEventId,
+      inviteToken: record.token,
+      inviteUrl: `${baseUrl}/join/${record.token}`,
+      ownerToken: record.ownerToken,
+      attendees: publicAttendees(record.attendees),
+      tasks: record.tasks,
+      dateOptions: record.dateOptions,
+      expenses: record.expenses || []
+    };
+  }
   const configuredUrl = options.publicAppUrl || process.env.PUBLIC_APP_URL || '';
   let configuredBaseUrl = null;
   if (configuredUrl) {
@@ -248,9 +343,26 @@ function createAppServer(options = {}) {
   async function loadStore() {
     if (pool) {
       await pool.query(`
+        CREATE TABLE IF NOT EXISTS organizers (
+          id TEXT PRIMARY KEY,
+          email TEXT NOT NULL UNIQUE,
+          name TEXT NOT NULL,
+          password_hash TEXT NOT NULL,
+          created_at TIMESTAMPTZ NOT NULL
+        )
+      `);
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS organizer_sessions (
+          token_hash TEXT PRIMARY KEY,
+          user_id TEXT NOT NULL REFERENCES organizers(id) ON DELETE CASCADE,
+          expires_at TIMESTAMPTZ NOT NULL
+        )
+      `);
+      await pool.query(`
         CREATE TABLE IF NOT EXISTS invitation_events (
           id TEXT PRIMARY KEY,
           client_event_id TEXT NOT NULL UNIQUE,
+          owner_user_id TEXT REFERENCES organizers(id) ON DELETE SET NULL,
           token TEXT NOT NULL UNIQUE,
           owner_token TEXT,
           event JSONB NOT NULL,
@@ -261,10 +373,12 @@ function createAppServer(options = {}) {
           created_at TIMESTAMPTZ NOT NULL
         )
       `);
-      const result = await pool.query('SELECT id, client_event_id, token, owner_token, event, attendees, tasks, date_options, expenses, created_at FROM invitation_events ORDER BY created_at');
+      await pool.query('ALTER TABLE invitation_events ADD COLUMN IF NOT EXISTS owner_user_id TEXT REFERENCES organizers(id) ON DELETE SET NULL');
+      const result = await pool.query('SELECT id, client_event_id, owner_user_id, token, owner_token, event, attendees, tasks, date_options, expenses, created_at FROM invitation_events ORDER BY created_at');
       records = result.rows.map(row => ({
         id: row.id,
         clientEventId: row.client_event_id,
+        ownerUserId: row.owner_user_id,
         token: row.token,
         ownerToken: row.owner_token,
         event: row.event,
@@ -307,10 +421,11 @@ function createAppServer(options = {}) {
         for (const record of records) {
           await client.query(`
             INSERT INTO invitation_events
-              (id, client_event_id, token, owner_token, event, attendees, tasks, date_options, expenses, created_at)
-            VALUES ($1, $2, $3, $4, $5::jsonb, $6::jsonb, $7::jsonb, $8::jsonb, $9::jsonb, $10)
+              (id, client_event_id, owner_user_id, token, owner_token, event, attendees, tasks, date_options, expenses, created_at)
+            VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7::jsonb, $8::jsonb, $9::jsonb, $10::jsonb, $11)
             ON CONFLICT (id) DO UPDATE SET
               client_event_id = EXCLUDED.client_event_id,
+              owner_user_id = EXCLUDED.owner_user_id,
               token = EXCLUDED.token,
               owner_token = EXCLUDED.owner_token,
               event = EXCLUDED.event,
@@ -321,6 +436,7 @@ function createAppServer(options = {}) {
           `, [
             record.id,
             record.clientEventId,
+            record.ownerUserId || null,
             record.token,
             record.ownerToken || null,
             JSON.stringify(record.event),
@@ -357,16 +473,81 @@ function createAppServer(options = {}) {
   }
 
   async function handleApi(request, response, url) {
+    if (request.method === 'POST' && url.pathname === '/api/auth/register') {
+      if (!pool) throw new HttpError(503, 'La autenticación necesita DATABASE_URL configurado.');
+      const body = await readJsonBody(request);
+      const email = normalizeEmail(body && body.email);
+      const name = cleanText(body && body.name, 'El nombre', 60);
+      const password = validatePassword(body && body.password);
+      const passwordHash = await hashPassword(password);
+      const userId = crypto.randomUUID();
+      try {
+        await pool.query(
+          'INSERT INTO organizers (id, email, name, password_hash, created_at) VALUES ($1, $2, $3, $4, NOW())',
+          [userId, email, name, passwordHash]
+        );
+      } catch (error) {
+        if (error.code === '23505') throw new HttpError(409, 'Ya existe una cuenta con ese correo.');
+        throw error;
+      }
+      const token = await createSession(userId);
+      sendJson(response, 201, { user: { id: userId, email, name } }, { 'Set-Cookie': sessionCookie(token) });
+      return;
+    }
+
+    if (request.method === 'POST' && url.pathname === '/api/auth/login') {
+      if (!pool) throw new HttpError(503, 'La autenticación necesita DATABASE_URL configurado.');
+      const body = await readJsonBody(request);
+      const email = normalizeEmail(body && body.email);
+      const password = validatePassword(body && body.password);
+      const result = await pool.query('SELECT id, email, name, password_hash FROM organizers WHERE email = $1', [email]);
+      const user = result.rows[0];
+      if (!user || !(await verifyPassword(password, user.password_hash))) {
+        throw new HttpError(401, 'El correo o la contraseña no son correctos.');
+      }
+      const token = await createSession(user.id);
+      sendJson(response, 200, { user: { id: user.id, email: user.email, name: user.name } }, { 'Set-Cookie': sessionCookie(token) });
+      return;
+    }
+
+    if (request.method === 'GET' && url.pathname === '/api/auth/me') {
+      const user = await getAuthenticatedUser(request);
+      if (!user) throw new HttpError(401, 'No hay una sesión iniciada.');
+      sendJson(response, 200, { user });
+      return;
+    }
+
+    if (request.method === 'POST' && url.pathname === '/api/auth/logout') {
+      if (pool) {
+        const rawToken = parseCookies(request).organizat_session;
+        if (rawToken) await pool.query('DELETE FROM organizer_sessions WHERE token_hash = $1', [hashSessionToken(rawToken)]);
+      }
+      sendJson(response, 200, { loggedOut: true }, { 'Set-Cookie': sessionCookie('', 0) });
+      return;
+    }
+
+    if (request.method === 'GET' && url.pathname === '/api/events') {
+      const user = await getAuthenticatedUser(request);
+      if (!user) throw new HttpError(401, 'Inicia sesión para ver tus eventos.');
+      sendJson(response, 200, { events: records.filter(record => record.ownerUserId === user.id).map(record => organizerEvent(record, request)) });
+      return;
+    }
+
     if (request.method === 'POST' && url.pathname === '/api/events') {
       const body = await readJsonBody(request);
+      const user = await getAuthenticatedUser(request);
       if (!body || typeof body !== 'object' || Array.isArray(body)) {
         throw new HttpError(400, 'Los datos del evento no son válidos.');
       }
       const result = await mutateStore(() => {
         let record = records.find(item => item.clientEventId === body.clientEventId);
         if (!record) {
-          record = createEventRecord(body);
+          record = createEventRecord(body, user ? user.id : null);
           records.push(record);
+        } else if (user && record.ownerUserId && record.ownerUserId !== user.id) {
+          throw new HttpError(403, 'No tienes permiso para usar este identificador de evento.');
+        } else if (user && !record.ownerUserId) {
+          record.ownerUserId = user.id;
         } else if (!record.ownerToken) {
           record.ownerToken = crypto.randomBytes(24).toString('base64url');
         }
