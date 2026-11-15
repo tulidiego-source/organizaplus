@@ -954,13 +954,27 @@ $('#auth-form').addEventListener('submit', async event => {
     const profileName = $('.profile-copy strong');
     if (profileName) profileName.textContent = authUser.name;
     $('#auth-modal').close();
-    await loadOwnedEvents();
-    showToast(`Bienvenido, ${authUser.name}.`);
+    if (activeInviteToken) {
+      $('#join-name').value = authUser.name;
+      $('#join-name').readOnly = true;
+      $('#join-login-button').classList.add('hidden');
+      openDialog('#join-modal');
+      showToast(`Sesión iniciada como ${authUser.name}.`);
+    } else {
+      await loadOwnedEvents();
+      showToast(`Bienvenido, ${authUser.name}.`);
+    }
   } catch (error) {
     $('#auth-feedback').textContent = error.message;
   } finally {
     submitButton.disabled = false;
   }
+});
+
+$('#join-login-button').addEventListener('click', () => {
+  $('#join-modal').close();
+  setAuthMode('login');
+  openDialog('#auth-modal');
 });
 
 $('#logout-button').addEventListener('click', async () => {

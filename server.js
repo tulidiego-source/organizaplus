@@ -665,7 +665,8 @@ function createAppServer(options = {}) {
     const joinMatch = url.pathname.match(/^\/api\/invitations\/([A-Za-z0-9_-]{32})\/join$/);
     if (request.method === 'POST' && joinMatch) {
       const body = await readJsonBody(request);
-      const name = cleanText(body && body.name, 'Tu nombre', 60);
+      const user = await getAuthenticatedUser(request);
+      const name = cleanText(user ? user.name : body && body.name, 'Tu nombre', 60);
       const result = await mutateStore(() => {
         const record = records.find(item => item.token === joinMatch[1]);
         if (!record) throw new HttpError(404, 'La invitación no existe o ha caducado.');
