@@ -423,8 +423,10 @@ h1 { margin-bottom: 6px; color: #263a30; font-size: clamp(24px, 2.4vw, 31px); fo
   .profile-button { display: flex; width: 48px; height: 48px; padding: 4px; border: 1px solid #e5e9e2; border-radius: 50%; background: #fff; box-shadow: 0 4px 14px rgba(37,53,46,.12); }
   .main-nav, .event-nav { position: absolute; bottom: 4px; display: flex; gap: 2px; width: auto; margin: 0; }
   .main-nav { left: 5px; width: 27%; }
-  .event-nav { right: 5px; width: 71%; }
-  .nav-link, .nav-link:hover, .nav-link.active { display: flex; flex: 1; flex-direction: column; align-items: center; justify-content: center; gap: 3px; min-width: 0; padding: 5px 2px; border-radius: 8px; font-size: 8px !important; line-height: 1.1; text-align: center; }
+  .event-nav { right: 5px; width: 71%; overflow-x: auto; scrollbar-width: none; }
+  .event-nav::-webkit-scrollbar { display: none; }
+  .nav-link, .nav-link:hover, .nav-link.active { display: flex; flex: 0 0 58px; flex-direction: column; align-items: center; justify-content: center; gap: 3px; min-width: 0; padding: 5px 2px; border-radius: 8px; font-size: 8px !important; line-height: 1.1; text-align: center; }
+  .main-nav .nav-link { flex: 1; }
   .nav-link.active { background: #eef4ed; }
   .nav-icon { width: auto; font-size: 18px; }
   .nav-count, .notification-dot { display: none; }

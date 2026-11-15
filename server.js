@@ -840,7 +840,7 @@ function eventForAuthenticatedUser(record, request, user) {
     const communityMatch = url.pathname.match(/^\/api\/invitations\/([A-Za-z0-9_-]{32})\/(chat|photos)$/);
     if (communityMatch) {
       const body = request.method === 'POST' ? await readJsonBody(request) : null;
-      const result = await mutateStore(() => {
+      const communityOperation = () => {
         const record = records.find(item => item.token === communityMatch[1]);
         if (!record) throw new HttpError(404, 'La invitación no existe o ha caducado.');
         const viewer = getCommunityViewer(record, request);
@@ -881,7 +881,10 @@ function eventForAuthenticatedUser(record, request, user) {
           notifications: updatedNotifications.notifications,
           unreadNotifications: updatedNotifications.unreadNotifications
         };
-      });
+      };
+      const result = request.method === 'POST'
+        ? await mutateStore(communityOperation)
+        : communityOperation();
       sendJson(response, request.method === 'POST' ? 201 : 200, result);
       return;
     }

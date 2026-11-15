@@ -508,6 +508,7 @@ async function bootstrapAuth() {
     markBootstrapReady('auth');
     if (error.status === 401) {
       if (!/^\/join\//.test(window.location.pathname)) {
+        showEmptyWorkspace();
         setAuthMode('login');
         openDialog('#auth-modal');
       }
