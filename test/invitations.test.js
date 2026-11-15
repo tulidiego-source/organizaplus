@@ -173,6 +173,31 @@ test('an attendee can confirm additional adults and children', async () => {
   }
 });
 
+test('an attendee can only edit their attendance and propose tasks', async () => {
+  const context = await startTestServer();
+  try {
+    const created = await requestJson(context.baseUrl, '/api/events', 'POST', invitationPayload(10));
+    const token = created.body.inviteToken;
+    const joined = await requestJson(context.baseUrl, `/api/invitations/${token}/join`, 'POST', { name: 'Lucía', adults: 1, children: 1 });
+    assert.match(joined.body.attendeeToken, /^[A-Za-z0-9_-]{32}$/);
+    const lucia = joined.body.attendees.find(person => person.name === 'Lucía');
+    const deniedDelete = await requestJson(context.baseUrl, `/api/invitations/${token}/attendees/${lucia.id}`, 'DELETE', undefined, { 'X-Attendee-Token': joined.body.attendeeToken });
+    assert.equal(deniedDelete.status, 403);
+    const cancelled = await requestJson(context.baseUrl, `/api/invitations/${token}/attendees/${lucia.id}`, 'PATCH', { status: 'Cancelado', adults: 2, children: 1 }, { 'X-Attendee-Token': joined.body.attendeeToken });
+    assert.equal(cancelled.status, 200);
+    const proposal = await requestJson(context.baseUrl, `/api/invitations/${token}/tasks/proposals`, 'POST', { name: 'Pan', quantity: '2 barras' }, { 'X-Attendee-Token': joined.body.attendeeToken });
+    assert.equal(proposal.status, 201);
+    const proposedTask = proposal.body.tasks.find(task => task.name === 'Pan');
+    assert.equal(proposedTask.proposalStatus, 'proposed');
+    const accepted = await requestJson(context.baseUrl, `/api/invitations/${token}/tasks/${proposedTask.id}`, 'PATCH', { action: 'approve' }, { 'X-Organizer-Token': created.body.ownerToken });
+    assert.equal(accepted.body.tasks.find(task => task.id === proposedTask.id).proposalStatus, 'accepted');
+    const organizerView = await requestJson(context.baseUrl, `/api/invitations/${token}`, 'GET', undefined, { 'X-Organizer-Token': created.body.ownerToken });
+    assert.equal(organizerView.body.notifications.some(notification => notification.title.includes('cancelado')), true);
+  } finally {
+    await context.cleanup();
+  }
+});
+
 test('shared tasks, votes and expenses survive an invitation state update', async () => {
   const context = await startTestServer();
   try {

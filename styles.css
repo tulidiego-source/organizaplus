@@ -167,6 +167,8 @@ h1 { margin-bottom: 6px; color: #263a30; font-size: clamp(24px, 2.4vw, 31px); fo
 .task-main strong { overflow: hidden; color: #4b594f; font-size: 10px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
 .task-main small { color: #9aa39b; font-size: 9px; }
 .task-owner { display: flex; align-items: center; gap: 5px; margin-left: auto; color: #839087; font-size: 9px; white-space: nowrap; }
+.task-assignee { max-width: 130px; padding: 5px 6px; border: 1px solid #e1e8df; border-radius: 6px; background: #fff; color: #526158; font-size: 10px; }
+.task-proposal-label { color: #a66b35; font-size: 10px; }
 .mini-avatar { display: grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; background: #ecdfcc; color: #6d5943; font-size: 8px; font-weight: 700; }
 .mini-avatar.unassigned { background: #fff1e5; color: #d17b3a; }
 .add-inline-button { display: flex; align-items: center; gap: 6px; margin-top: 11px; padding: 0; border: 0; background: none; color: var(--green); font-size: 10px; font-weight: 700; }
@@ -386,7 +388,9 @@ h1 { margin-bottom: 6px; color: #263a30; font-size: clamp(24px, 2.4vw, 31px); fo
 @media (max-width: 560px) {
   body { font-size: 16px; }
   .sidebar { position: fixed; inset: auto 0 0; z-index: 10; display: block; width: 100%; height: 70px; padding: 4px 5px; border-top: 1px solid #e5e9e2; border-right: 0; box-shadow: 0 -5px 18px rgba(37,53,46,.08); }
-  .brand, .workspace-label, .sidebar-bottom { display: none; }
+  .brand, .workspace-label, .help-card { display: none; }
+  .sidebar-bottom { display: block; position: absolute; right: 6px; top: -58px; }
+  .profile-button { display: flex; width: 48px; height: 48px; padding: 4px; border: 1px solid #e5e9e2; border-radius: 50%; background: #fff; box-shadow: 0 4px 14px rgba(37,53,46,.12); }
   .main-nav, .event-nav { position: absolute; bottom: 4px; display: flex; gap: 2px; width: auto; margin: 0; }
   .main-nav { left: 5px; width: 27%; }
   .event-nav { right: 5px; width: 71%; }

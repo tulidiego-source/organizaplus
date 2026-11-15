@@ -95,6 +95,9 @@ let authUser = null;
 let authMode = 'login';
 let attendeeToDeleteIndex = null;
 let joinedInvitationNames = {};
+let joinedInvitationTokens = {};
+let currentViewerAttendeeId = '';
+let editingOwnAttendance = false;
 let joinAlreadyHandledToken = '';
 
 async function requestApi(route, options = {}) {
@@ -297,7 +300,8 @@ function persistAppState() {
       events: eventTemplates,
       eventStates,
       currentEventId: currentEvent.id,
-      joinedInvitationNames
+      joinedInvitationNames,
+      joinedInvitationTokens
     }));
     return true;
   } catch (error) {
@@ -347,6 +351,9 @@ function loadPersistedData() {
   eventStates = storedData.eventStates;
   joinedInvitationNames = storedData.joinedInvitationNames && typeof storedData.joinedInvitationNames === 'object'
     ? storedData.joinedInvitationNames
+    : {};
+  joinedInvitationTokens = storedData.joinedInvitationTokens && typeof storedData.joinedInvitationTokens === 'object'
+    ? storedData.joinedInvitationTokens
     : {};
   currentEvent = eventTemplates.find(event => event.id === storedData.currentEventId);
   restoreEventData(currentEvent.id);
@@ -504,6 +511,7 @@ async function bootstrapAuth() {
   try {
     const result = await requestApi('/api/auth/me');
     authUser = result.user;
+    if (activeInviteToken) currentViewerAttendeeId = attendees.find(person => person.name === authUser.name)?.id || '';
     updateProfileUi();
     if (/^\/join\//.test(window.location.pathname)) {
       updateJoinAuthenticationUi();
@@ -620,6 +628,12 @@ async function ensureRemoteInvitation() {
   currentEvent.inviteToken = invitation.inviteToken;
   currentEvent.inviteUrl = invitation.inviteUrl;
   currentEvent.ownerToken = invitation.ownerToken;
+  const remote = await requestApi(`/api/invitations/${encodeURIComponent(currentEvent.inviteToken)}`, { headers: { 'X-Organizer-Token': currentEvent.ownerToken } });
+  attendees = remote.attendees || attendees;
+  tasks = remote.tasks || tasks;
+  dateOptions = remote.dateOptions || dateOptions;
+  expenses = remote.expenses || expenses;
+  eventNotifications = remote.notifications || eventNotifications;
   persistAppState();
   return invitation;
 }
@@ -640,7 +654,10 @@ async function refreshRemoteAttendees(showError = false) {
   inviteRefreshInProgress = true;
   updateInviteSyncStatus('Actualizando confirmaciones…');
   try {
-    const invitation = await requestApi(`/api/invitations/${encodeURIComponent(currentEvent.inviteToken)}`);
+    const headers = currentEvent.ownerToken
+      ? { 'X-Organizer-Token': currentEvent.ownerToken }
+      : (joinedInvitationTokens[currentEvent.inviteToken] ? { 'X-Attendee-Token': joinedInvitationTokens[currentEvent.inviteToken] } : {});
+    const invitation = await requestApi(`/api/invitations/${encodeURIComponent(currentEvent.inviteToken)}`, { headers });
     currentEvent = { ...currentEvent, ...(invitation.event || {}) };
     eventTemplates = eventTemplates.map(event => event.id === currentEvent.id ? currentEvent : event);
     const refreshedAttendees = invitation.attendees;
@@ -731,10 +748,13 @@ function renderTaskRow(task, index, interactive = false) {
   const owner = task.person
     ? `<span class="mini-avatar" style="background:${personColor(task.person)}">${initials(task.person)}</span>${task.person.split(' ')[0]}`
     : '<span class="mini-avatar unassigned">＋</span>Pendiente';
+  const proposal = task.proposalStatus === 'proposed';
+  const proposalAction = proposal && currentEvent.ownerToken ? `<button class="secondary-button task-accept-button" type="button" data-accept-task="${escapeHtml(task.id || '')}">Aceptar</button>` : (proposal ? '<small class="task-proposal-label">Propuesta pendiente</small>' : '');
+  const assignmentControl = currentEvent.ownerToken && interactive && !proposal ? `<select class="task-assignee" data-task-assignee="${escapeHtml(task.id || '')}" aria-label="Asignar tarea"><option value="">Sin asignar</option>${attendees.filter(person => person.status !== 'Cancelado').map(person => `<option value="${escapeHtml(person.name)}" ${person.name === task.person ? 'selected' : ''}>${escapeHtml(person.name)}</option>`).join('')}</select>` : '';
   return `<div class="task-row">
     <button class="task-check ${task.done ? 'done' : ''}" data-task-index="${index}" aria-label="${task.done ? 'Marcar pendiente' : 'Marcar completado'}" ${interactive ? '' : 'tabindex="-1"'}>${task.done ? '✓' : ''}</button>
     <span class="task-main"><strong>${escapeHtml(task.name)}</strong><small>${escapeHtml(task.quantity || 'Cantidad por definir')}</small></span>
-    <span class="task-owner">${owner}</span>
+    <span class="task-owner">${assignmentControl || owner}${proposalAction}</span>
   </div>`;
 }
 
@@ -747,18 +767,47 @@ function renderTasks() {
   $('#nav-task-count').textContent = tasks.length;
 
   $$('.task-check').forEach(button => {
-    button.addEventListener('click', () => {
+    button.addEventListener('click', async () => {
       const task = tasks[Number(button.dataset.taskIndex)];
+      const attendeeToken = joinedInvitationTokens[currentEvent.inviteToken];
+      if (!currentEvent.ownerToken && attendeeToken && task.id) {
+        try {
+          const action = task.person ? 'toggle' : 'claim';
+          const invitation = await requestApi(`/api/invitations/${encodeURIComponent(currentEvent.inviteToken)}/tasks/${encodeURIComponent(task.id)}`, { method: 'PATCH', headers: { 'X-Attendee-Token': attendeeToken }, body: JSON.stringify({ action }) });
+          tasks = invitation.tasks;
+          eventNotifications = invitation.notifications || eventNotifications;
+          renderAll();
+        } catch (error) { showToast(error.message); }
+        return;
+      }
       task.done = !task.done;
       renderTasks();
       persistAppState();
       syncRemoteEventState();
     });
   });
+  $$('.task-accept-button').forEach(button => button.addEventListener('click', async () => {
+    try {
+      const invitation = await requestApi(`/api/invitations/${encodeURIComponent(currentEvent.inviteToken)}/tasks/${encodeURIComponent(button.dataset.acceptTask)}`, { method: 'PATCH', headers: { 'X-Organizer-Token': currentEvent.ownerToken }, body: JSON.stringify({ action: 'approve' }) });
+      tasks = invitation.tasks;
+      eventNotifications = invitation.notifications || eventNotifications;
+      renderAll();
+      showToast('Propuesta aceptada.');
+    } catch (error) { showToast(error.message); }
+  }));
+  $$('.task-assignee').forEach(select => select.addEventListener('change', async () => {
+    try {
+      const invitation = await requestApi(`/api/invitations/${encodeURIComponent(currentEvent.inviteToken)}/tasks/${encodeURIComponent(select.dataset.taskAssignee)}`, { method: 'PATCH', headers: { 'X-Organizer-Token': currentEvent.ownerToken }, body: JSON.stringify({ person: select.value }) });
+      tasks = invitation.tasks;
+      eventNotifications = invitation.notifications || eventNotifications;
+      renderAll();
+      showToast(select.value ? 'Tarea asignada.' : 'Tarea liberada.');
+    } catch (error) { showToast(error.message); }
+  }));
 }
 
 function renderAttendees() {
-  const confirmedPeople = attendees.filter(person => person.status !== 'Pendiente');
+  const confirmedPeople = attendees.filter(person => person.status !== 'Pendiente' && person.status !== 'Cancelado');
   const confirmed = confirmedPeople.reduce((total, person) => total + attendeePeopleCount(person), 0);
   const pending = attendees.filter(person => person.status === 'Pendiente').length;
   $('#hero-attendee-count').textContent = confirmed;
@@ -775,8 +824,10 @@ function renderAttendees() {
     `<span class="avatar" style="background:${person.color}">${escapeHtml(person.initial)}</span>`
   ).join('') + (confirmedPeople.length > 4 ? `<span class="avatar avatar-extra">+${confirmedPeople.length - 4}</span>` : '');
   $('#avatar-stack').setAttribute('aria-label', `${confirmed} ${confirmed === 1 ? 'asistente confirmado' : 'asistentes confirmados'}`);
-  const organizerConfirmed = attendees[0]?.status !== 'Pendiente';
+  const me = attendees.find(person => person.id === currentViewerAttendeeId) || attendees[0];
+  const organizerConfirmed = me?.status !== 'Pendiente' && me?.status !== 'Cancelado';
   $('#confirm-button').classList.toggle('confirmed', organizerConfirmed);
+  $('#confirm-button').classList.toggle('hidden', Boolean(activeInviteToken && !currentViewerAttendeeId));
   $('#confirm-button-text').textContent = organizerConfirmed ? 'Asistencia confirmada' : 'Confirmar asistencia';
 
   $('#attendee-strip').innerHTML = attendees.slice(0, 6).map(person =>
@@ -786,8 +837,9 @@ function renderAttendees() {
     <div class="attendee-list-row">
       <span class="avatar" style="background:${person.color}">${person.initial}</span>
       <span class="attendee-list-name"><strong>${escapeHtml(person.name)}</strong><small>${escapeHtml(person.role)} · ${escapeHtml(attendeePartyLabel(person))}</small></span>
-      <span class="attendance-status ${person.status === 'Pendiente' ? 'pending' : ''}">${person.status === 'Pendiente' ? 'Por confirmar' : person.status}</span>
-      ${index > 0 ? `<button class="attendee-delete-button" type="button" data-delete-attendee="${index}" aria-label="Eliminar a ${escapeHtml(person.name)}">×</button>` : ''}
+       <span class="attendance-status ${person.status === 'Pendiente' || person.status === 'Cancelado' ? 'pending' : ''}">${person.status === 'Pendiente' ? 'Por confirmar' : person.status}</span>
+       ${index > 0 && currentEvent.ownerToken ? `<button class="attendee-delete-button" type="button" data-delete-attendee="${index}" aria-label="Eliminar a ${escapeHtml(person.name)}">×</button>` : ''}
+       ${person.id === currentViewerAttendeeId ? '<button class="attendee-edit-button" type="button" data-edit-attendee aria-label="Editar mi asistencia">✎</button>' : ''}
     </div>`).join('');
   populatePeopleOptions();
 }
@@ -831,7 +883,7 @@ async function deleteSelectedAttendee() {
 
 function renderExpenses() {
   const total = expenses.reduce((sum, expense) => sum + expense.amount, 0);
-  const confirmed = attendees.filter(person => person.status !== 'Pendiente')
+  const confirmed = attendees.filter(person => person.status !== 'Pendiente' && person.status !== 'Cancelado')
     .reduce((totalPeople, person) => totalPeople + attendeePeopleCount(person), 0);
   const share = confirmed ? total / confirmed : 0;
   $('#total-expenses').textContent = euro(total);
@@ -854,7 +906,7 @@ function renderExpenses() {
     const paidCents = Math.round(expense.amount * 100);
     paidByPerson.set(expense.person, (paidByPerson.get(expense.person) || 0) + paidCents);
   });
-  const balances = attendees.filter(person => person.status !== 'Pendiente')
+  const balances = attendees.filter(person => person.status !== 'Pendiente' && person.status !== 'Cancelado')
     .map((person, index) => {
       const personShareCents = baseShareCents + (index < extraShareCents ? 1 : 0);
       return { ...person, balance: ((paidByPerson.get(person.name) || 0) - personShareCents) / 100 };
@@ -1034,21 +1086,30 @@ function renderNotifications() {
   $$('#notifications-list [data-notification-tab]').forEach(button => button.addEventListener('click', () => setTab(button.dataset.notificationTab)));
 }
 
-$('#confirm-button').addEventListener('click', () => {
-  const me = attendees[0];
-  if (me.status === 'Pendiente') {
-    me.status = 'Confirmado';
-    $('#confirm-button').classList.add('confirmed');
-    $('#confirm-button-text').textContent = '¡Ya estás apuntado!';
-    showToast('¡Genial! Ya has confirmado tu asistencia.');
+$('#confirm-button').addEventListener('click', async () => {
+  const me = attendees.find(person => person.id === currentViewerAttendeeId) || attendees[0];
+  if (!me) return;
+  const token = joinedInvitationTokens[currentEvent.inviteToken];
+  const nextStatus = me.status === 'Cancelado' || me.status === 'Pendiente' ? 'Confirmado' : 'Cancelado';
+  if (currentEvent.inviteToken && token && me.id) {
+    try {
+      const result = await requestApi(`/api/invitations/${encodeURIComponent(currentEvent.inviteToken)}/attendees/${encodeURIComponent(me.id)}`, {
+        method: 'PATCH',
+        headers: { 'X-Attendee-Token': token },
+        body: JSON.stringify({ status: nextStatus, adults: me.adults || 1, children: me.children || 0 })
+      });
+      attendees = result.attendees;
+      eventNotifications = result.notifications || eventNotifications;
+      showToast(nextStatus === 'Confirmado' ? '¡Genial! Ya has confirmado tu asistencia.' : 'Has cancelado tu asistencia.');
+    } catch (error) {
+      showToast(error.message);
+      return;
+    }
   } else {
-    me.status = 'Pendiente';
-    $('#confirm-button').classList.remove('confirmed');
-    $('#confirm-button-text').textContent = 'Confirmar asistencia';
-    showToast('Has cambiado tu respuesta a pendiente.');
+    me.status = nextStatus;
+    showToast(nextStatus === 'Confirmado' ? '¡Genial! Ya has confirmado tu asistencia.' : 'Has cancelado tu asistencia.');
   }
-  renderAttendees();
-  renderExpenses();
+  renderAll();
   persistAppState();
 });
 
@@ -1102,6 +1163,21 @@ $('#open-delete-confirm').addEventListener('click', openDeleteConfirmation);
 $('#cancel-delete').addEventListener('click', () => $('#delete-confirm-modal').close());
 $('#confirm-delete').addEventListener('click', deleteCurrentEvent);
 $('#attendee-list').addEventListener('click', event => {
+  if (event.target.closest('[data-edit-attendee]')) {
+    const me = attendees.find(person => person.id === currentViewerAttendeeId);
+    if (!me) return;
+    editingOwnAttendance = true;
+    $('#join-name').value = me.name;
+    $('#join-name').readOnly = true;
+    $('#join-guest-fields').classList.remove('hidden');
+    $('#join-party-fields').classList.remove('hidden');
+    $('#join-submit').classList.remove('hidden');
+    $('#join-adults').value = Math.max(0, (me.adults || 1) - 1);
+    $('#join-children').value = me.children || 0;
+    $('#join-feedback').textContent = '';
+    openDialog('#join-modal');
+    return;
+  }
   const button = event.target.closest('[data-delete-attendee]');
   if (!button) return;
   openAttendeeDeleteConfirmation(Number(button.dataset.deleteAttendee));
@@ -1593,14 +1669,24 @@ $('#event-form').addEventListener('submit', event => event.preventDefault());
 
 $('#task-form').addEventListener('submit', event => {
   event.preventDefault();
+  const formElement = event.currentTarget;
   const form = new FormData(event.currentTarget);
   const person = form.get('person');
-  tasks.push({ name: form.get('name').trim(), quantity: form.get('quantity').trim(), person, done: false });
+  const taskData = { name: form.get('name').trim(), quantity: form.get('quantity').trim(), person, done: false };
+  const attendeeToken = joinedInvitationTokens[currentEvent.inviteToken];
+  if (!currentEvent.ownerToken && attendeeToken) {
+    requestApi(`/api/invitations/${encodeURIComponent(currentEvent.inviteToken)}/tasks/proposals`, { method: 'POST', headers: { 'X-Attendee-Token': attendeeToken }, body: JSON.stringify(taskData) })
+      .then(invitation => { tasks = invitation.tasks; eventNotifications = invitation.notifications || eventNotifications; renderAll(); persistAppState(); formElement.reset(); $('#task-modal').close(); showToast('Propuesta enviada al organizador.'); })
+      .catch(error => showToast(error.message));
+    return;
+  }
+  tasks.push(taskData);
   renderTasks();
   const saved = persistAppState();
   event.currentTarget.reset();
   $('#task-modal').close();
   if (saved) showToast(person ? '¡Añadido! Ya tiene responsable.' : 'Añadido a la lista. Queda pendiente de asignar.');
+  syncRemoteEventState();
 });
 
 $('#expense-form').addEventListener('submit', event => {
@@ -1683,7 +1769,9 @@ async function loadInvitationFromLink() {
   $('#join-feedback').textContent = 'Cargando los detalles del evento…';
   openDialog('#join-modal');
   try {
-    const invitation = await requestApi(`/api/invitations/${encodeURIComponent(activeInviteToken)}`);
+    const invitation = await requestApi(`/api/invitations/${encodeURIComponent(activeInviteToken)}`, {
+      headers: joinedInvitationTokens[activeInviteToken] ? { 'X-Attendee-Token': joinedInvitationTokens[activeInviteToken] } : {}
+    });
     const remoteEvent = {
       ...invitation.event,
       inviteToken: activeInviteToken,
@@ -1701,6 +1789,9 @@ async function loadInvitationFromLink() {
       notifications: cloneData(invitation.notifications || [])
     };
     currentEvent = remoteEvent;
+    currentViewerAttendeeId = authUser
+      ? (invitation.attendees.find(person => person.name === authUser.name)?.id || '')
+      : (invitation.attendees.find(person => person.name.toLocaleLowerCase('es-ES') === (joinedInvitationNames[activeInviteToken] || '').toLocaleLowerCase('es-ES'))?.id || '');
     restoreEventData(remoteEvent.id);
     renderAll();
     persistAppState();
@@ -1731,11 +1822,33 @@ $('#join-form').addEventListener('submit', async event => {
   submitButton.disabled = true;
   $('#join-feedback').textContent = 'Guardando tu confirmación…';
   try {
+    if (editingOwnAttendance && currentViewerAttendeeId && joinedInvitationTokens[activeInviteToken]) {
+      const updated = await requestApi(`/api/invitations/${encodeURIComponent(activeInviteToken)}/attendees/${encodeURIComponent(currentViewerAttendeeId)}`, {
+        method: 'PATCH',
+        headers: { 'X-Attendee-Token': joinedInvitationTokens[activeInviteToken] },
+        body: JSON.stringify({ status: 'Confirmado', adults: 1 + additionalAdults, children })
+      });
+      attendees = updated.attendees;
+      eventNotifications = updated.notifications || eventNotifications;
+      editingOwnAttendance = false;
+      $('#join-modal').close();
+      renderAll();
+      persistAppState();
+      showToast('Tu asistencia se ha actualizado.');
+      return;
+    }
     const result = await requestApi(`/api/invitations/${encodeURIComponent(activeInviteToken)}/join`, {
       method: 'POST',
       body: JSON.stringify({ name, adults: additionalAdults, children })
     });
     attendees = result.attendees;
+    if (result.attendeeToken) joinedInvitationTokens[activeInviteToken] = result.attendeeToken;
+    currentViewerAttendeeId = attendees.find(person => person.name === name)?.id || '';
+    const joinedRemote = await requestApi(`/api/invitations/${encodeURIComponent(activeInviteToken)}`, { headers: { 'X-Attendee-Token': joinedInvitationTokens[activeInviteToken] } });
+    tasks = joinedRemote.tasks || tasks;
+    dateOptions = joinedRemote.dateOptions || dateOptions;
+    expenses = joinedRemote.expenses || expenses;
+    eventNotifications = joinedRemote.notifications || eventNotifications;
     joinedInvitationNames[activeInviteToken] = name;
     saveCurrentEventData();
     renderAll();

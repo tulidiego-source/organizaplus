@@ -67,7 +67,7 @@ function normalizeAttendees(input) {
       throw new HttpError(400, 'Hay un asistente no válido.');
     }
     const name = cleanText(person.name, 'El nombre del asistente', 60);
-    const allowedStatuses = ['Confirmado', 'Confirmada', 'Pendiente'];
+    const allowedStatuses = ['Confirmado', 'Confirmada', 'Pendiente', 'Cancelado'];
     if (!allowedStatuses.includes(person.status)) throw new HttpError(400, 'El estado de asistencia no es válido.');
     const status = person.status;
     const role = typeof person.role === 'string' ? cleanText(person.role, 'El rol', 40, false) : 'Participante';
@@ -84,13 +84,14 @@ function normalizeAttendees(input) {
       children,
       color,
       ...(typeof person.email === 'string' ? { email: person.email.slice(0, 254).trim().toLowerCase() } : {}),
-      id: typeof person.id === 'string' ? person.id : `initial-${index}`
+      id: typeof person.id === 'string' ? person.id : `initial-${index}`,
+      privateToken: typeof person.privateToken === 'string' ? person.privateToken : crypto.randomBytes(24).toString('base64url')
     };
   });
 }
 
 function attendeeHeadcount(attendees) {
-  return attendees.reduce((total, person) => total + (person.adults || 1) + (person.children || 0), 0);
+  return attendees.reduce((total, person) => total + (person.status === 'Cancelado' ? 0 : (person.adults || 1) + (person.children || 0)), 0);
 }
 
 function normalizeTasks(input) {
@@ -104,7 +105,10 @@ function normalizeTasks(input) {
       name: cleanText(task.name, 'El nombre de la tarea', 80),
       quantity: cleanText(task.quantity || '', 'La cantidad', 40, false),
       person: cleanText(task.person || '', 'El responsable', 60, false),
-      done: task.done
+      done: task.done,
+      id: typeof task.id === 'string' ? task.id : crypto.randomUUID(),
+      proposalStatus: task.proposalStatus === 'proposed' ? 'proposed' : 'accepted',
+      ...(typeof task.proposedBy === 'string' ? { proposedBy: task.proposedBy } : {})
     };
   });
 }
@@ -146,17 +150,25 @@ function normalizeExpenses(input) {
 }
 
 function publicAttendees(attendees) {
-  return attendees.map(({ email, ...person }) => person);
+  return attendees.map(({ email, privateToken, ...person }) => person);
 }
 
-function publicInvitation(record) {
+function publicInvitation(record, request) {
+  const attendeeToken = request && request.headers['x-attendee-token'];
+  const isOrganizer = request && request.headers['x-organizer-token'] && request.headers['x-organizer-token'] === record.ownerToken;
+  const viewer = record.attendees.find(person => person.privateToken === attendeeToken);
+  const notifications = (record.notifications || []).filter(notification =>
+    (notification.audience === 'all' && !notification.recipientId)
+    || (isOrganizer && notification.audience === 'organizer')
+    || (viewer && notification.recipientId === viewer.id)
+  );
   return {
     event: record.event,
     attendees: publicAttendees(record.attendees),
     tasks: record.tasks,
     dateOptions: record.dateOptions,
     expenses: record.expenses || [],
-    notifications: record.notifications || []
+    notifications
   };
 }
 
@@ -420,7 +432,7 @@ function createAppServer(options = {}) {
         token: row.token,
         ownerToken: row.owner_token,
         event: row.event,
-        attendees: row.attendees,
+        attendees: normalizeAttendees(row.attendees),
         tasks: row.tasks,
         dateOptions: row.date_options,
         expenses: row.expenses || [],
@@ -432,7 +444,7 @@ function createAppServer(options = {}) {
           const contents = await fs.readFile(databaseFile, 'utf8');
           const parsed = JSON.parse(contents);
           if (Array.isArray(parsed.events) && parsed.events.length) {
-            records = parsed.events;
+            records = parsed.events.map(record => ({ ...record, attendees: normalizeAttendees(record.attendees) }));
             await saveStore();
           }
         } catch (error) {
@@ -682,7 +694,7 @@ function createAppServer(options = {}) {
             createdAt: new Date().toISOString()
           }].slice(-20);
         }
-        return publicInvitation(record);
+         return publicInvitation(record, request);
       });
       sendJson(response, 200, result);
       return;
@@ -709,11 +721,50 @@ function createAppServer(options = {}) {
     if (request.method === 'GET' && inviteMatch) {
       const record = records.find(item => item.token === inviteMatch[1]);
       if (!record) throw new HttpError(404, 'La invitación no existe o ha caducado.');
-      sendJson(response, 200, publicInvitation(record));
+       sendJson(response, 200, publicInvitation(record, request));
       return;
     }
 
     const attendeeDeleteMatch = url.pathname.match(/^\/api\/invitations\/([A-Za-z0-9_-]{32})\/attendees\/([A-Za-z0-9_-]+)$/);
+    if (request.method === 'PATCH' && attendeeDeleteMatch) {
+      const body = await readJsonBody(request);
+      const result = await mutateStore(() => {
+        const record = records.find(item => item.token === attendeeDeleteMatch[1]);
+        if (!record) throw new HttpError(404, 'La invitación no existe o ha caducado.');
+        const attendee = record.attendees.find(person => person.id === attendeeDeleteMatch[2]);
+        if (!attendee || attendee.privateToken !== request.headers['x-attendee-token']) {
+          throw new HttpError(403, 'Solo puedes modificar tu propia asistencia.');
+        }
+        const status = body && body.status === 'Cancelado' ? 'Cancelado' : 'Confirmado';
+        const adults = Number(body && body.adults);
+        const children = Number(body && body.children);
+        if (!Number.isInteger(adults) || adults < 1 || adults > 50 || !Number.isInteger(children) || children < 0 || children > 50) {
+          throw new HttpError(400, 'El número de asistentes no es válido.');
+        }
+        const previousStatus = attendee.status;
+        attendee.status = status;
+        attendee.adults = adults;
+        attendee.children = children;
+        record.notifications = [...(record.notifications || []), {
+          id: crypto.randomUUID(),
+          audience: 'organizer',
+          title: status === 'Cancelado' ? `${attendee.name} ha cancelado su asistencia` : `${attendee.name} ha actualizado su asistencia`,
+          detail: status === 'Cancelado' ? 'Ya no contará para el aforo.' : `${attendee.adults} adulto${attendee.adults === 1 ? '' : 's'} y ${attendee.children} niño${attendee.children === 1 ? '' : 's'}.`,
+          createdAt: new Date().toISOString()
+        }];
+        if (previousStatus !== status) {
+          record.notifications.push({
+            id: crypto.randomUUID(), recipientId: attendee.id, audience: 'all',
+            title: status === 'Cancelado' ? 'Asistencia cancelada' : 'Asistencia confirmada',
+            detail: status === 'Cancelado' ? `${attendee.name} ya no asistirá al evento.` : `${attendee.name} vuelve a estar en el plan.`,
+            createdAt: new Date().toISOString()
+          });
+        }
+        return publicInvitation(record, request);
+      });
+      sendJson(response, 200, result);
+      return;
+    }
     if (request.method === 'DELETE' && attendeeDeleteMatch) {
       const result = await mutateStore(() => {
         const record = records.find(item => item.token === attendeeDeleteMatch[1]);
@@ -725,7 +776,7 @@ function createAppServer(options = {}) {
         if (index < 0) throw new HttpError(404, 'El asistente ya no está en este evento.');
         if (index === 0) throw new HttpError(400, 'El organizador no se puede eliminar del evento.');
         record.attendees.splice(index, 1);
-        return publicInvitation(record);
+         return publicInvitation(record, request);
       });
       sendJson(response, 200, result);
       return;
@@ -740,10 +791,75 @@ function createAppServer(options = {}) {
         if (!record.ownerToken || request.headers['x-organizer-token'] !== record.ownerToken) {
           throw new HttpError(403, 'No tienes permiso para modificar este evento.');
         }
+        const previousTasks = JSON.stringify(record.tasks);
         record.tasks = normalizeTasks(body && body.tasks);
+        if (record.tasks.some(task => task.person && !record.attendees.some(person => person.status !== 'Cancelado' && person.name === task.person))) {
+          throw new HttpError(400, 'Una tarea está asignada a una persona que no pertenece al evento.');
+        }
         record.dateOptions = normalizeDateOptions(body && body.dateOptions);
         record.expenses = normalizeExpenses(body && body.expenses);
-        return publicInvitation(record);
+        if (previousTasks !== JSON.stringify(record.tasks)) {
+          record.notifications = [...(record.notifications || []), { id: crypto.randomUUID(), audience: 'all', title: 'La lista se ha actualizado', detail: 'Hay cambios en las cosas que hay que llevar y sus responsables.', createdAt: new Date().toISOString() }].slice(-30);
+        }
+         return publicInvitation(record, request);
+      });
+      sendJson(response, 200, result);
+      return;
+    }
+
+    const taskProposalMatch = url.pathname.match(/^\/api\/invitations\/([A-Za-z0-9_-]{32})\/tasks\/proposals$/);
+    if (request.method === 'POST' && taskProposalMatch) {
+      const body = await readJsonBody(request);
+      const result = await mutateStore(() => {
+        const record = records.find(item => item.token === taskProposalMatch[1]);
+        const attendee = record && record.attendees.find(person => person.privateToken === request.headers['x-attendee-token']);
+        if (!record) throw new HttpError(404, 'La invitación no existe o ha caducado.');
+        if (!attendee) throw new HttpError(403, 'Solo un asistente puede proponer algo.');
+        const task = normalizeTasks([{ name: body && body.name, quantity: body && body.quantity || '', person: '', done: false, proposalStatus: 'proposed', proposedBy: attendee.id }])[0];
+        record.tasks.push(task);
+        record.notifications = [...(record.notifications || []), {
+          id: crypto.randomUUID(), audience: 'organizer', title: `${attendee.name} propone añadir algo`,
+          detail: `${task.name}${task.quantity ? ` · ${task.quantity}` : ''}. Revisa la propuesta en la lista.`, createdAt: new Date().toISOString()
+        }];
+        return publicInvitation(record, request);
+      });
+      sendJson(response, 201, result);
+      return;
+    }
+
+    const taskUpdateMatch = url.pathname.match(/^\/api\/invitations\/([A-Za-z0-9_-]{32})\/tasks\/([A-Za-z0-9_-]+)$/);
+    if (request.method === 'PATCH' && taskUpdateMatch) {
+      const body = await readJsonBody(request);
+      const result = await mutateStore(() => {
+        const record = records.find(item => item.token === taskUpdateMatch[1]);
+        const task = record && record.tasks.find(item => item.id === taskUpdateMatch[2]);
+        if (!record || !task) throw new HttpError(404, 'La tarea no existe.');
+        const isOrganizer = request.headers['x-organizer-token'] === record.ownerToken;
+        const attendee = record.attendees.find(person => person.privateToken === request.headers['x-attendee-token']);
+        if (body && body.action === 'approve') {
+          if (!isOrganizer) throw new HttpError(403, 'Solo el organizador puede aceptar propuestas.');
+          task.proposalStatus = 'accepted';
+          record.notifications = [...(record.notifications || []), { id: crypto.randomUUID(), audience: 'all', title: 'Propuesta aceptada', detail: `«${task.name}» ya forma parte de la lista.`, createdAt: new Date().toISOString() }, { id: crypto.randomUUID(), recipientId: task.proposedBy, title: 'Tu propuesta ha sido aceptada', detail: `«${task.name}» ya está en la lista del evento.`, createdAt: new Date().toISOString() }];
+        } else if (body && body.action === 'claim') {
+          if (!attendee) throw new HttpError(403, 'Solo puedes asignarte tareas a ti mismo.');
+          task.person = attendee.name;
+          record.notifications = [...(record.notifications || []), { id: crypto.randomUUID(), audience: 'all', title: 'Tarea asignada', detail: `${attendee.name} se encarga de «${task.name}».`, createdAt: new Date().toISOString() }];
+        } else if (body && body.action === 'toggle') {
+          if (!isOrganizer && (!attendee || task.person !== attendee.name)) throw new HttpError(403, 'Solo puedes actualizar tus propias tareas.');
+          task.done = !task.done;
+          record.notifications = [...(record.notifications || []), { id: crypto.randomUUID(), audience: 'all', title: task.done ? 'Tarea completada' : 'Tarea pendiente', detail: `«${task.name}» está ${task.done ? 'lista' : 'pendiente'}.`, createdAt: new Date().toISOString() }];
+        } else if (isOrganizer) {
+          const requestedPerson = typeof body.person === 'string' ? body.person : task.person;
+          if (requestedPerson && !record.attendees.some(person => person.status !== 'Cancelado' && person.name === requestedPerson)) {
+            throw new HttpError(400, 'La persona asignada no pertenece al evento.');
+          }
+          task.person = requestedPerson;
+          task.done = typeof body.done === 'boolean' ? body.done : task.done;
+          record.notifications = [...(record.notifications || []), { id: crypto.randomUUID(), audience: 'all', title: task.person ? 'Tarea asignada' : 'Tarea liberada', detail: task.person ? `«${task.name}» la hará ${task.person}.` : `«${task.name}» vuelve a estar pendiente de asignar.`, createdAt: new Date().toISOString() }];
+        } else {
+          throw new HttpError(403, 'No tienes permiso para modificar esta tarea.');
+        }
+        return publicInvitation(record, request);
       });
       sendJson(response, 200, result);
       return;
@@ -762,7 +878,7 @@ function createAppServer(options = {}) {
         const existing = record.attendees.find(person =>
           person.name.toLocaleLowerCase('es-ES') === normalizedName
         );
-        if (existing && existing.status !== 'Pendiente') {
+        if (existing && ['Confirmado', 'Confirmada'].includes(existing.status)) {
           throw new HttpError(409, 'Ya hay una persona confirmada con ese nombre. Añade tu apellido para distinguirte.');
         }
         const additionalAdults = body && body.adults === undefined ? 0 : Number(body && body.adults);
@@ -773,10 +889,11 @@ function createAppServer(options = {}) {
         const partyAdults = 1 + additionalAdults;
         const partySize = partyAdults + children;
         const currentHeadcount = attendeeHeadcount(record.attendees);
-        const existingHeadcount = existing ? (existing.adults || 1) + (existing.children || 0) : 0;
+        const existingHeadcount = existing && existing.status !== 'Cancelado' ? (existing.adults || 1) + (existing.children || 0) : 0;
         if (currentHeadcount - existingHeadcount + partySize > record.event.capacity) {
           throw new HttpError(409, 'El evento ha alcanzado el aforo máximo.');
         }
+        const previousHeadcount = currentHeadcount;
         if (existing) {
           existing.status = 'Confirmado';
           existing.role = 'Participante';
@@ -791,12 +908,28 @@ function createAppServer(options = {}) {
             status: 'Confirmado',
             adults: partyAdults,
             children,
-            color: '#c4d6c0'
+            color: '#c4d6c0',
+            privateToken: crypto.randomBytes(24).toString('base64url')
           });
         }
-        return publicAttendees(record.attendees);
+        const nextHeadcount = attendeeHeadcount(record.attendees);
+        record.notifications = [...(record.notifications || []), {
+          id: crypto.randomUUID(),
+          audience: 'organizer',
+          title: `${name} se ha unido al evento`,
+          detail: `${name} ha confirmado ${partyAdults} adulto${partyAdults === 1 ? '' : 's'} y ${children} niño${children === 1 ? '' : 's'}.`,
+          createdAt: new Date().toISOString()
+        }];
+        if (Math.floor(nextHeadcount / 5) > Math.floor(previousHeadcount / 5)) {
+          const messages = nextHeadcount > 20
+            ? ['A ver dónde nos metemos tanta gente, ¡no vamos a caber todos en la foto grupal!', 'Esto ya no es un plan, ¡es un festival!', 'Habrá que ampliar la mesa: ya somos un montón.']
+            : ['Esto se anima, ya somos X.', 'La gente se está animando, se va a liar.', '¡Cinco más al plan! Esto promete.'];
+          const message = messages[Math.floor(Math.random() * messages.length)].replace('X', String(nextHeadcount));
+          record.notifications.push({ id: crypto.randomUUID(), audience: 'all', title: '¡El grupo crece!', detail: message, createdAt: new Date().toISOString() });
+        }
+        return { attendees: publicAttendees(record.attendees), attendeeToken: existing ? existing.privateToken : record.attendees.at(-1).privateToken };
       });
-      sendJson(response, 200, { attendees: result });
+      sendJson(response, 200, result);
       return;
     }
 
