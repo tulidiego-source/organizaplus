@@ -88,6 +88,8 @@ let remoteStateSyncQueued = false;
 let authUser = null;
 let authMode = 'login';
 let attendeeToDeleteIndex = null;
+let joinedInvitationNames = {};
+let joinAlreadyHandledToken = '';
 
 async function requestApi(route, options = {}) {
   let response;
@@ -254,7 +256,8 @@ function persistAppState() {
       version: 1,
       events: eventTemplates,
       eventStates,
-      currentEventId: currentEvent.id
+      currentEventId: currentEvent.id,
+      joinedInvitationNames
     }));
     return true;
   } catch (error) {
@@ -301,6 +304,9 @@ function loadPersistedData() {
 
   eventTemplates = storedData.events;
   eventStates = storedData.eventStates;
+  joinedInvitationNames = storedData.joinedInvitationNames && typeof storedData.joinedInvitationNames === 'object'
+    ? storedData.joinedInvitationNames
+    : {};
   currentEvent = eventTemplates.find(event => event.id === storedData.currentEventId);
   restoreEventData(currentEvent.id);
 }
@@ -396,6 +402,7 @@ function updateJoinAuthenticationUi() {
     nameInput.value = authUser.name;
     nameInput.readOnly = true;
     nameInput.required = false;
+    maybeSkipJoinConfirmation();
     return;
   }
 
@@ -407,6 +414,21 @@ function updateJoinAuthenticationUi() {
   nameInput.value = '';
   nameInput.readOnly = false;
   nameInput.required = false;
+}
+
+function maybeSkipJoinConfirmation() {
+  if (!activeInviteToken || currentEvent.inviteToken !== activeInviteToken || joinAlreadyHandledToken === activeInviteToken) return;
+  const knownName = authUser?.name || joinedInvitationNames[activeInviteToken];
+  if (!knownName) return;
+  const normalizedName = knownName.trim().toLocaleLowerCase('es-ES');
+  const alreadyConfirmed = attendees.some(person =>
+    person.status !== 'Pendiente' && person.name.trim().toLocaleLowerCase('es-ES') === normalizedName
+  );
+  if (!alreadyConfirmed) return;
+  joinAlreadyHandledToken = activeInviteToken;
+  $('#join-modal').close();
+  setTab('overview');
+  showToast(`Ya estás unido a «${currentEvent.name}».`);
 }
 
 async function bootstrapAuth() {
@@ -1444,6 +1466,7 @@ async function loadInvitationFromLink() {
   if (!routeMatch) return;
 
   activeInviteToken = routeMatch[1];
+  joinAlreadyHandledToken = '';
   $('#join-feedback').textContent = 'Cargando los detalles del evento…';
   openDialog('#join-modal');
   try {
@@ -1470,6 +1493,7 @@ async function loadInvitationFromLink() {
     $('#join-event-name').textContent = remoteEvent.name;
     $('#join-event-details').textContent = `${formatDateLong(remoteEvent.date)} · ${remoteEvent.time || '14:00'} · ${remoteEvent.location}`;
     updateJoinAuthenticationUi();
+    maybeSkipJoinConfirmation();
     $('#join-feedback').textContent = '';
   } catch (error) {
     console.error('Unable to load the event invitation.', error);
@@ -1496,6 +1520,7 @@ $('#join-form').addEventListener('submit', async event => {
       body: JSON.stringify({ name })
     });
     attendees = result.attendees;
+    joinedInvitationNames[activeInviteToken] = name;
     saveCurrentEventData();
     renderAll();
     persistAppState();
