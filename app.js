@@ -341,8 +341,10 @@ function showEmptyWorkspace() {
   eventTemplates = [emptyEvent];
   eventStates = { [emptyEvent.id]: createEmptyEventState(emptyEvent) };
   currentEvent = emptyEvent;
+  currentTab = 'overview';
   restoreEventData(emptyEvent.id);
   renderAll();
+  setTab('overview');
   persistAppState();
 }
 
@@ -1018,18 +1020,20 @@ function capitalize(value) {
 function setTab(tab) {
   const validTabs = ['events', 'overview', 'attendees', 'tasks', 'expenses', 'inbox'];
   currentTab = validTabs.includes(tab) ? tab : 'overview';
+  const hasEvent = currentEvent && currentEvent.id !== 'empty-workspace';
+  if (!hasEvent && ['attendees', 'tasks', 'expenses'].includes(currentTab)) currentTab = 'overview';
   const showOverview = currentTab === 'overview';
   const showEventGallery = currentTab === 'overview' || currentTab === 'events';
   $('#event-gallery').classList.toggle('hidden', !showEventGallery);
   $('.event-hero').classList.toggle('hidden', !showOverview);
-  $('.event-status').classList.toggle('hidden', !showOverview);
-  $('.content-grid').classList.toggle('hidden', !showOverview);
-  $('#plan-panel').classList.toggle('hidden', !showOverview);
-  $('.date-panel').classList.toggle('hidden', !showOverview);
-  $('.attendees-panel').classList.toggle('hidden', !showOverview);
-  $('#attendees-view').classList.toggle('hidden', currentTab !== 'attendees');
-  $('#tasks-view').classList.toggle('hidden', currentTab !== 'tasks');
-  $('#expenses-view').classList.toggle('hidden', currentTab !== 'expenses');
+  $('.event-status').classList.toggle('hidden', !showOverview || !hasEvent);
+  $('.content-grid').classList.toggle('hidden', !showOverview || !hasEvent);
+  $('#plan-panel').classList.toggle('hidden', !showOverview || !hasEvent);
+  $('.date-panel').classList.toggle('hidden', !showOverview || !hasEvent);
+  $('.attendees-panel').classList.toggle('hidden', !showOverview || !hasEvent);
+  $('#attendees-view').classList.toggle('hidden', currentTab !== 'attendees' || !hasEvent);
+  $('#tasks-view').classList.toggle('hidden', currentTab !== 'tasks' || !hasEvent);
+  $('#expenses-view').classList.toggle('hidden', currentTab !== 'expenses' || !hasEvent);
   $('#inbox-view').classList.toggle('hidden', currentTab !== 'inbox');
   $$('.sidebar .nav-link[data-tab]').forEach(button => button.classList.toggle('active', button.dataset.tab === currentTab));
   window.scrollTo({ top: 0, behavior: 'smooth' });
