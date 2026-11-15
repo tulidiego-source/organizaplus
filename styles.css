@@ -373,6 +373,7 @@ h1 { margin-bottom: 6px; color: #263a30; font-size: clamp(24px, 2.4vw, 31px); fo
   .content-grid .panel { padding: 16px; }
 }
 @media (max-width: 560px) {
+  body { font-size: 16px; }
   .sidebar { position: fixed; inset: auto 0 0; z-index: 10; display: block; width: 100%; height: 70px; padding: 4px 5px; border-top: 1px solid #e5e9e2; border-right: 0; box-shadow: 0 -5px 18px rgba(37,53,46,.08); }
   .brand, .workspace-label, .sidebar-bottom { display: none; }
   .main-nav, .event-nav { position: absolute; bottom: 4px; display: flex; gap: 2px; width: auto; margin: 0; }
@@ -384,11 +385,11 @@ h1 { margin-bottom: 6px; color: #263a30; font-size: clamp(24px, 2.4vw, 31px); fo
   .nav-count, .notification-dot { display: none; }
   .main-content { margin-left: 0; padding-bottom: 70px; }
   .topbar { height: 55px; padding: 0 13px; }
-  .breadcrumbs { gap: 6px; max-width: 54vw; overflow: hidden; font-size: 9px; white-space: nowrap; }
+  .breadcrumbs { gap: 6px; max-width: 54vw; overflow: hidden; font-size: 11px; white-space: nowrap; }
   .breadcrumbs strong { overflow: hidden; text-overflow: ellipsis; }
   .topbar-actions { gap: 5px; }
   .notification-button { display: none; }
-  .share-button, .secondary-button { padding: 8px; font-size: 9px; }
+  .share-button, .secondary-button { min-height: 42px; padding: 9px 11px; font-size: 11px; }
   .page-wrap { padding: 14px 12px 12px; }
   .event-gallery { grid-template-columns: 1fr; }
   .event-hero { grid-template-columns: 1fr; }
@@ -397,63 +398,67 @@ h1 { margin-bottom: 6px; color: #263a30; font-size: clamp(24px, 2.4vw, 31px); fo
   .sun-shape { top: 18px; right: calc(50% - 93px); width: 51px; height: 51px; }
   .hero-sticker { top: 13px; left: 13px; transform: scale(.88) rotate(-5deg); transform-origin: top left; }
   .hero-content { padding: 16px 14px 13px; }
-  h1 { font-size: 24px; }
+  .event-kicker, .section-eyebrow { font-size: 11px; }
+  h1 { font-size: 29px; line-height: 1.12; }
   .mobile-break { display: initial; }
-  .hero-description { margin-bottom: 13px; font-size: 10px; }
+  .hero-description { margin-bottom: 16px; font-size: 14px; line-height: 1.45; }
   .hero-title-row { margin-top: 7px; }
   .event-meta { display: grid; grid-template-columns: 1.2fr 1fr; gap: 6px; }
   .meta-item { gap: 5px; }
-  .meta-item strong { font-size: 9px; }
-  .meta-item small { font-size: 8px; }
+  .meta-item strong { font-size: 12px; }
+  .meta-item small { font-size: 11px; line-height: 1.35; }
   .map-link { margin-left: 0; }
   .hero-footer { flex-wrap: wrap; gap: 5px; }
-  .attendee-summary { margin-left: 5px; font-size: 8px; }
-  .confirm-button { margin-left: auto; padding: 8px 9px; }
+  .attendee-summary { margin-left: 5px; font-size: 12px; }
+  .confirm-button { min-height: 42px; margin-left: auto; padding: 9px 11px; font-size: 11px; }
   .event-status { margin-top: 21px; }
-  .status-heading h2 { font-size: 15px; }
-  .quiet-button { font-size: 9px; }
+  .status-heading h2 { font-size: 20px; }
+  .quiet-button { font-size: 11px; }
   .status-grid { grid-template-columns: 1fr; gap: 8px; margin-top: 10px; }
   .status-card { min-height: 72px; flex-direction: row; align-items: center; gap: 11px; padding: 12px; }
   .status-icon { display: grid; flex: 0 0 auto; width: 34px; height: 34px; font-size: 17px; }
   .status-card-copy { gap: 4px; }
-  .status-card-copy small { font-size: 9px; }
-  .status-card-copy strong { font-size: 16px; }
-  .status-note { font-size: 10px; }
+  .status-card-copy small { font-size: 11px; }
+  .status-card-copy strong { font-size: 18px; }
+  .status-note { font-size: 12px; }
   .status-arrow { position: static; display: block; margin-left: auto; font-size: 18px; }
   .content-grid { gap: 9px; margin-top: 17px; }
   .content-grid .panel { padding: 18px 15px; }
-  .panel-heading h2 { font-size: 17px; }
+  .panel-heading h2 { font-size: 19px; }
   .task-preview .task-row, .task-board .task-row { padding: 15px 2px; }
-  .task-main strong, .task-board .task-main strong { font-size: 13px; }
-  .task-main small, .task-board .task-main small { font-size: 11px; }
+  .task-main strong, .task-board .task-main strong { font-size: 15px; }
+  .task-main small, .task-board .task-main small { font-size: 12px; }
   .attendees-panel { margin-top: 9px; padding: 14px 12px; }
   .attendee-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 5px; }
   .person-chip { padding: 5px; }
-  .person-chip span:last-child { font-size: 8px; }
+  .person-chip span:last-child { font-size: 11px; }
   .page-footer { gap: 8px; font-size: 8px; }
   .page-footer > span:last-child { white-space: nowrap; }
   .tab-view { margin-top: 19px; }
-  .tab-header { align-items: flex-start; gap: 7px; }
-  .tab-header h2 { font-size: 24px; }
-  .tab-header p { max-width: 250px; font-size: 12px; line-height: 1.5; }
-  .tab-header .primary-button { flex: 0 0 auto; padding: 11px 10px; font-size: 10px; }
+  .tab-header { align-items: stretch; gap: 10px; }
+  .tab-header h2 { font-size: 27px; line-height: 1.15; }
+  .tab-header p { max-width: 280px; font-size: 14px; line-height: 1.5; }
+  .tab-header .primary-button { align-self: stretch; min-height: 44px; padding: 11px 10px; font-size: 12px; }
   .attendee-list-row { gap: 12px; padding: 15px 14px; }
   .attendee-list-row .avatar { width: 39px; height: 39px; font-size: 13px; }
-  .attendee-list-name strong { font-size: 13px; }
-  .attendee-list-name small { font-size: 10px; }
-  .attendance-status { padding: 6px 9px; font-size: 10px; }
+  .attendee-list-name strong { font-size: 15px; }
+  .attendee-list-name small { font-size: 12px; }
+  .attendance-status { padding: 7px 10px; font-size: 11px; }
   .attendee-delete-button { width: 28px; height: 28px; font-size: 18px; }
   .expense-summary-grid { grid-template-columns: 1fr; gap: 9px; }
   .expense-total-card { gap: 7px; padding: 16px 14px; }
-  .expense-total-card span { font-size: 9px; }
-  .expense-total-card strong { font-size: 24px; }
-  .expense-total-card small { font-size: 10px; line-height: 1.4; }
+  .expense-total-card span { font-size: 11px; }
+  .expense-total-card strong { font-size: 28px; }
+  .expense-total-card small { font-size: 12px; line-height: 1.4; }
   .expense-panel, .balances-panel { padding: 17px 14px; }
   .expense-entry, .balance-entry { padding: 15px 0; }
-  .expense-entry-copy strong, .balance-entry strong { font-size: 13px; }
-  .expense-entry-copy small, .balance-entry .owes-note { font-size: 10px; }
+  .expense-entry-copy strong, .balance-entry strong { font-size: 15px; }
+  .expense-entry-copy small, .balance-entry .owes-note { font-size: 12px; }
   .page-footer { display: none; }
-  .modal-form { padding: 25px 20px; }
+  .modal-form { padding: 28px 20px; }
+  .modal-form label { font-size: 12px; }
+  .modal-form input, .modal-form select { height: 46px; font-size: 14px; }
+  .modal-form .primary-button, .modal-form .secondary-button { min-height: 46px; font-size: 13px; }
   .wizard-progress { gap: 4px; }
   .wizard-step-indicator { grid-template-columns: 23px; justify-items: center; gap: 3px; }
   .wizard-step-indicator span { width: 22px; height: 22px; }
