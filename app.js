@@ -552,7 +552,9 @@ async function bootstrapAuth() {
     } else {
       await loadOwnedEvents();
     }
+    markBootstrapReady('auth');
   } catch (error) {
+    markBootstrapReady('auth');
     if (error.status === 401) {
       if (!/^\/join\//.test(window.location.pathname)) {
         setAuthMode('login');
@@ -561,6 +563,18 @@ async function bootstrapAuth() {
     } else {
       showToast(error.message);
     }
+  }
+}
+
+const bootstrapState = {
+  auth: false,
+  invitation: !/^\/join\//.test(window.location.pathname)
+};
+
+function markBootstrapReady(part) {
+  bootstrapState[part] = true;
+  if (bootstrapState.auth && bootstrapState.invitation) {
+    document.body.classList.remove('app-loading');
   }
 }
 
@@ -1841,12 +1855,14 @@ async function loadInvitationFromLink() {
     updateJoinAuthenticationUi();
     maybeSkipJoinConfirmation();
     $('#join-feedback').textContent = '';
+    markBootstrapReady('invitation');
   } catch (error) {
     console.error('Unable to load the event invitation.', error);
     $('#join-event-name').textContent = 'Invitación no disponible';
     $('#join-event-details').textContent = 'El enlace puede haber caducado o no estar publicado correctamente.';
     $('#join-feedback').textContent = error.message;
     $('#join-submit').disabled = true;
+    markBootstrapReady('invitation');
   }
 }
 
@@ -1915,6 +1931,7 @@ function renderAll() {
   renderNotifications();
 }
 
+document.body.classList.add('app-loading');
 loadPersistedData();
 renderAll();
 bootstrapAuth();

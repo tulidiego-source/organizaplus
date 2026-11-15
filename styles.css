@@ -15,6 +15,7 @@
 
 * { box-sizing: border-box; }
 body { margin: 0; background: var(--canvas); color: var(--ink); font-size: 14px; }
+body.app-loading .app-shell { visibility: hidden; }
 button, input, select { font: inherit; }
 button { color: inherit; cursor: pointer; }
 .app-shell { min-height: 100vh; }
