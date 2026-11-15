@@ -43,6 +43,7 @@ let joinedInvitationTokens = {};
 let currentViewerAttendeeId = '';
 let editingOwnAttendance = false;
 let joinAlreadyHandledToken = '';
+let pendingPurchaseTaskId = '';
 
 async function requestApi(route, options = {}) {
   let response;
@@ -787,17 +788,32 @@ function renderTasks() {
       showToast('La compra se marca con el check de € cuando esté hecha.');
     });
   });
-  $$('.task-purchased').forEach(button => button.addEventListener('click', async () => {
+  $$('button.task-purchased').forEach(button => button.addEventListener('click', async () => {
+    const task = tasks.find(item => item.id === button.dataset.taskPurchased);
+    if (!task) return;
+
+    const viewer = attendees.find(person => person.id === currentViewerAttendeeId);
     const attendeeToken = joinedInvitationTokens[currentEvent.inviteToken];
-    const headers = currentEvent.ownerToken
-      ? { 'X-Organizer-Token': currentEvent.ownerToken }
-      : (attendeeToken ? { 'X-Attendee-Token': attendeeToken } : {});
     if (!currentEvent.ownerToken && !attendeeToken) {
       showToast('Necesitas estar unido al evento para actualizar la compra.');
       return;
     }
+
+    // Al marcar una compra nueva, primero pedimos los datos del ticket.
+    // Si ya estaba comprada, el mismo botón permite deshacerlo directamente.
+    if (!(task.purchased === true || task.done === true)) {
+      pendingPurchaseTaskId = task.id;
+      $('#expense-name').value = task.name;
+      $('#expense-person').value = task.person || viewer?.name || authUser?.name || '';
+      openDialog('#expense-modal');
+      return;
+    }
+
     try {
-      const invitation = await requestApi(`/api/invitations/${encodeURIComponent(currentEvent.inviteToken)}/tasks/${encodeURIComponent(button.dataset.taskPurchased)}`, { method: 'PATCH', headers, body: JSON.stringify({ action: 'purchase' }) });
+      const headers = currentEvent.ownerToken
+        ? { 'X-Organizer-Token': currentEvent.ownerToken }
+        : { 'X-Attendee-Token': attendeeToken };
+      const invitation = await requestApi(`/api/invitations/${encodeURIComponent(currentEvent.inviteToken)}/tasks/${encodeURIComponent(task.id)}`, { method: 'PATCH', headers, body: JSON.stringify({ action: 'purchase' }) });
       tasks = invitation.tasks;
       eventNotifications = invitation.notifications || eventNotifications;
       renderAll();
@@ -1754,6 +1770,8 @@ $('#expense-form').addEventListener('submit', event => {
     showToast('Introduce un importe mayor que cero.');
     return;
   }
+  const purchaseTaskId = pendingPurchaseTaskId;
+  pendingPurchaseTaskId = '';
   expenses.unshift({
     name: form.get('name').trim(),
     amount,
@@ -1764,8 +1782,44 @@ $('#expense-form').addEventListener('submit', event => {
   const saved = persistAppState();
   event.currentTarget.reset();
   $('#expense-modal').close();
-  if (saved) showToast('Ticket guardado y gastos actualizados.');
-  syncRemoteEventState();
+  if (saved) showToast(purchaseTaskId ? 'Ticket guardado. Marcando la compra…' : 'Ticket guardado y gastos actualizados.');
+
+  const finishPurchase = async () => {
+    if (!purchaseTaskId) return;
+    if (!currentEvent.inviteToken) {
+      const task = tasks.find(item => item.id === purchaseTaskId);
+      if (task) {
+        task.purchased = true;
+        task.done = true;
+        renderAll();
+        persistAppState();
+      }
+      return;
+    }
+    const attendeeToken = joinedInvitationTokens[currentEvent.inviteToken];
+    const headers = currentEvent.ownerToken
+      ? { 'X-Organizer-Token': currentEvent.ownerToken }
+      : (attendeeToken ? { 'X-Attendee-Token': attendeeToken } : {});
+    if (!currentEvent.ownerToken && !attendeeToken) {
+      showToast('El ticket se guardó, pero necesitas estar unido al evento para marcar la compra.');
+      return;
+    }
+    try {
+      const invitation = await requestApi(`/api/invitations/${encodeURIComponent(currentEvent.inviteToken)}/tasks/${encodeURIComponent(purchaseTaskId)}`, { method: 'PATCH', headers, body: JSON.stringify({ action: 'purchase' }) });
+      tasks = invitation.tasks;
+      eventNotifications = invitation.notifications || eventNotifications;
+      renderAll();
+      showToast('Compra registrada y marcada en la lista.');
+    } catch (error) {
+      showToast(`El ticket se guardó, pero no se pudo marcar la compra: ${error.message}`);
+    }
+  };
+
+  Promise.resolve(currentEvent.ownerToken ? syncRemoteEventState() : null).then(finishPurchase);
+});
+
+$('#expense-modal').addEventListener('close', () => {
+  pendingPurchaseTaskId = '';
 });
 
 $('#copy-invite-button').addEventListener('click', async () => {
