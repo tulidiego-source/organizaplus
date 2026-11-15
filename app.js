@@ -44,6 +44,10 @@ let currentViewerAttendeeId = '';
 let editingOwnAttendance = false;
 let joinAlreadyHandledToken = '';
 let pendingPurchaseTaskId = '';
+let communityMessages = [];
+let eventPhotos = [];
+let communityLoading = false;
+let communityLoadedToken = '';
 
 async function requestApi(route, options = {}) {
   let response;
@@ -315,6 +319,9 @@ function loadPersistedData() {
 function activateEvent(event) {
   saveCurrentEventData();
   currentEvent = event;
+  communityMessages = [];
+  eventPhotos = [];
+  communityLoadedToken = '';
   restoreEventData(event.id);
   renderAll();
   const saved = persistAppState();
@@ -1079,12 +1086,16 @@ function capitalize(value) {
 }
 
 function setTab(tab) {
-  const validTabs = ['events', 'overview', 'attendees', 'tasks', 'expenses', 'inbox'];
+  const validTabs = ['events', 'overview', 'attendees', 'tasks', 'expenses', 'chat', 'photos', 'inbox'];
   currentTab = validTabs.includes(tab) ? tab : 'overview';
   const hasEvent = currentEvent && currentEvent.id !== 'empty-workspace';
-  if (!hasEvent && ['attendees', 'tasks', 'expenses'].includes(currentTab)) currentTab = 'overview';
+  const viewer = attendees.find(person => person.id === currentViewerAttendeeId);
+  const canAccessCommunity = Boolean(currentEvent?.ownerToken || (viewer && ['Confirmado', 'Confirmada'].includes(viewer.status)));
+  if (!hasEvent && ['attendees', 'tasks', 'expenses', 'chat', 'photos'].includes(currentTab)) currentTab = 'overview';
+  if (!canAccessCommunity && ['chat', 'photos'].includes(currentTab)) currentTab = 'overview';
   $('.event-label').classList.toggle('hidden', !hasEvent);
   $('.event-nav').classList.toggle('hidden', !hasEvent);
+  $$('.event-nav [data-tab="chat"], .event-nav [data-tab="photos"]').forEach(button => button.classList.toggle('hidden', !canAccessCommunity));
   const showOverview = currentTab === 'overview';
   const showEventGallery = currentTab === 'overview' || currentTab === 'events';
   $('#event-gallery').classList.toggle('hidden', !showEventGallery);
@@ -1097,8 +1108,11 @@ function setTab(tab) {
   $('#attendees-view').classList.toggle('hidden', currentTab !== 'attendees' || !hasEvent);
   $('#tasks-view').classList.toggle('hidden', currentTab !== 'tasks' || !hasEvent);
   $('#expenses-view').classList.toggle('hidden', currentTab !== 'expenses' || !hasEvent);
+  $('#chat-view').classList.toggle('hidden', currentTab !== 'chat' || !hasEvent || !canAccessCommunity);
+  $('#photos-view').classList.toggle('hidden', currentTab !== 'photos' || !hasEvent || !canAccessCommunity);
   $('#inbox-view').classList.toggle('hidden', currentTab !== 'inbox');
   $$('.sidebar .nav-link[data-tab]').forEach(button => button.classList.toggle('active', button.dataset.tab === currentTab));
+  if (['chat', 'photos'].includes(currentTab)) loadCommunity();
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
@@ -1107,6 +1121,90 @@ function escapeHtml(value) {
     '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
   })[character]);
 }
+
+function communityHeaders() {
+  if (currentEvent.ownerToken) return { 'X-Organizer-Token': currentEvent.ownerToken };
+  const attendeeToken = joinedInvitationTokens[currentEvent.inviteToken];
+  return attendeeToken ? { 'X-Attendee-Token': attendeeToken } : {};
+}
+
+function renderCommunity() {
+  const chat = $('#chat-messages');
+  if (chat) {
+    chat.innerHTML = communityMessages.length
+      ? communityMessages.map(message => `<article class="chat-message"><div class="chat-message-heading"><strong>${escapeHtml(message.authorName)}</strong><small>${escapeHtml(new Date(message.createdAt).toLocaleString('es-ES', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }))}</small></div><p>${escapeHtml(message.text)}</p></article>`).join('')
+      : '<p class="empty-hint">Todavía no hay mensajes. ¡Saluda al grupo!</p>';
+    chat.scrollTop = chat.scrollHeight;
+  }
+  const grid = $('#photo-grid');
+  if (grid) {
+    grid.innerHTML = eventPhotos.length
+      ? eventPhotos.slice().reverse().map(photo => `<figure class="event-photo"><img src="${photo.data}" alt="${escapeHtml(photo.name)}" loading="lazy"><figcaption>${escapeHtml(photo.authorName)} · ${escapeHtml(photo.name)}</figcaption></figure>`).join('')
+      : '<p class="empty-hint">Todavía no hay fotos. Comparte la primera del evento.</p>';
+  }
+}
+
+async function loadCommunity(force = false) {
+  if (!currentEvent?.inviteToken || communityLoading || (!force && communityLoadedToken === currentEvent.inviteToken)) return;
+  const viewer = attendees.find(person => person.id === currentViewerAttendeeId);
+  if (!currentEvent.ownerToken && (!viewer || !['Confirmado', 'Confirmada'].includes(viewer.status))) return;
+  communityLoading = true;
+  try {
+    const result = await requestApi(`/api/invitations/${encodeURIComponent(currentEvent.inviteToken)}/chat`, { headers: communityHeaders() });
+    communityMessages = result.chatMessages || [];
+    const photosResult = await requestApi(`/api/invitations/${encodeURIComponent(currentEvent.inviteToken)}/photos`, { headers: communityHeaders() });
+    eventPhotos = photosResult.photos || [];
+    communityLoadedToken = currentEvent.inviteToken;
+    renderCommunity();
+  } catch (error) {
+    if (currentTab === 'chat' || currentTab === 'photos') showToast(error.message);
+  } finally {
+    communityLoading = false;
+  }
+}
+
+async function compressPhoto(file) {
+  const source = await new Promise((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => resolve(image);
+    image.onerror = reject;
+    image.src = URL.createObjectURL(file);
+  });
+  const scale = Math.min(1, 1600 / source.width, 1600 / source.height);
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.max(1, Math.round(source.width * scale));
+  canvas.height = Math.max(1, Math.round(source.height * scale));
+  canvas.getContext('2d').drawImage(source, 0, 0, canvas.width, canvas.height);
+  return canvas.toDataURL('image/jpeg', .78);
+}
+
+$('#chat-form').addEventListener('submit', async event => {
+  event.preventDefault();
+  const input = $('#chat-message');
+  const text = input.value.trim();
+  if (!text || !currentEvent.inviteToken) return;
+  try {
+    const result = await requestApi(`/api/invitations/${encodeURIComponent(currentEvent.inviteToken)}/chat`, { method: 'POST', headers: communityHeaders(), body: JSON.stringify({ text }) });
+    communityMessages = result.chatMessages || [];
+    input.value = '';
+    communityLoadedToken = currentEvent.inviteToken;
+    renderCommunity();
+  } catch (error) { showToast(error.message); }
+});
+
+$('#photo-input').addEventListener('change', async event => {
+  const file = event.target.files[0];
+  event.target.value = '';
+  if (!file || !currentEvent.inviteToken) return;
+  try {
+    const data = await compressPhoto(file);
+    const result = await requestApi(`/api/invitations/${encodeURIComponent(currentEvent.inviteToken)}/photos`, { method: 'POST', headers: communityHeaders(), body: JSON.stringify({ name: file.name.replace(/\.[^.]+$/, ''), data }) });
+    eventPhotos = result.photos || [];
+    communityLoadedToken = currentEvent.inviteToken;
+    renderCommunity();
+    showToast('Foto compartida con el grupo.');
+  } catch (error) { showToast(error.message || 'No se pudo compartir la foto.'); }
+});
 
 $$('[data-tab]').forEach(button => button.addEventListener('click', () => setTab(button.dataset.tab)));
 
@@ -1985,6 +2083,7 @@ function renderAll() {
   renderAttendees();
   renderTasks();
   renderExpenses();
+  renderCommunity();
   renderNotifications();
 }
 
@@ -1995,4 +2094,5 @@ bootstrapAuth();
 loadInvitationFromLink();
 window.setInterval(() => {
   if (currentEvent.inviteToken) refreshRemoteAttendees();
+  if (['chat', 'photos'].includes(currentTab)) loadCommunity(true);
 }, 15000);

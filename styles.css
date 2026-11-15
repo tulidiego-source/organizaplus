@@ -357,6 +357,22 @@ h1 { margin-bottom: 6px; color: #263a30; font-size: clamp(24px, 2.4vw, 31px); fo
 .join-guest-fields { display: grid; gap: 8px; }
 .toast { position: fixed; z-index: 10; right: 25px; bottom: 24px; max-width: calc(100vw - 40px); padding: 12px 17px; border-radius: 8px; background: #263e30; color: white; box-shadow: 0 8px 25px rgba(26,44,32,.2); font-size: 11px; opacity: 0; pointer-events: none; transform: translateY(8px); transition: opacity .2s, transform .2s; }
 .toast.show { opacity: 1; transform: translateY(0); }
+.community-panel { padding: 20px; }
+.community-messages { display: grid; gap: 10px; max-height: 480px; min-height: 180px; overflow-y: auto; padding: 4px; }
+.chat-message { max-width: 78%; padding: 10px 13px; border-radius: 12px 12px 12px 3px; background: #f1f5ef; }
+.chat-message-heading { display: flex; align-items: baseline; gap: 8px; }
+.chat-message-heading strong { color: var(--green); font-size: 12px; }
+.chat-message-heading small { color: var(--muted); font-size: 10px; }
+.chat-message p { margin: 5px 0 0; color: #45564b; font-size: 13px; line-height: 1.45; white-space: pre-wrap; overflow-wrap: anywhere; }
+.community-form { display: flex; gap: 9px; margin-top: 16px; padding-top: 15px; border-top: 1px solid var(--line); }
+.community-form input { flex: 1; min-width: 0; height: 43px; padding: 0 12px; border: 1px solid #dfe6dd; border-radius: 8px; background: #fff; }
+.community-form .primary-button { min-height: 43px; }
+.upload-photo-button { cursor: pointer; text-decoration: none; }
+.photo-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 13px; padding: 18px; }
+.event-photo { margin: 0; overflow: hidden; border: 1px solid #e6ece4; border-radius: 10px; background: #fafbf8; }
+.event-photo img { display: block; width: 100%; aspect-ratio: 1 / 1; object-fit: cover; }
+.event-photo figcaption { padding: 9px 10px; color: #68766d; font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
 
 @media (min-width: 1450px) {
   .page-wrap { width: min(1190px, 100%); }
@@ -480,6 +496,13 @@ h1 { margin-bottom: 6px; color: #263a30; font-size: clamp(24px, 2.4vw, 31px); fo
   .expense-total-card strong { font-size: 28px; }
   .expense-total-card small { font-size: 12px; line-height: 1.4; }
   .expense-panel, .balances-panel { padding: 17px 14px; }
+  .community-panel { padding: 14px; }
+  .community-messages { min-height: 260px; }
+  .community-form { align-items: stretch; flex-direction: column; }
+  .community-form input { min-height: 46px; font-size: 15px; }
+  .community-form .primary-button { justify-content: center; }
+  .photo-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; padding: 12px; }
+  .event-photo figcaption { padding: 8px; font-size: 11px; }
   .expense-entry, .balance-entry { padding: 15px 0; }
   .expense-entry-copy strong, .balance-entry strong { font-size: 15px; }
   .expense-entry-copy small, .balance-entry .owes-note { font-size: 12px; }

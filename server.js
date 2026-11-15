@@ -16,7 +16,7 @@ if (fsSync.existsSync(envFilePath)) {
   }
 }
 const defaultDatabaseFile = path.join(rootDirectory, 'data', 'invitations.json');
-const maximumRequestBytes = 32 * 1024;
+const maximumRequestBytes = 6 * 1024 * 1024;
 const sessionDurationSeconds = 60 * 60 * 24 * 30;
 const allowedStaticFiles = new Map([
   ['/', ['index.html', 'text/html; charset=utf-8']],
@@ -147,6 +147,34 @@ function normalizeExpenses(input) {
       amount: Math.round(Number(expense.amount) * 100) / 100,
       person: cleanText(expense.person, 'La persona que pagó', 60),
       date: cleanText(expense.date || '', 'La fecha del gasto', 40, false)
+    };
+  });
+}
+
+function normalizeChatMessages(input) {
+  if (!Array.isArray(input) || input.length > 1000) throw new HttpError(400, 'El chat no es válido.');
+  return input.map(message => ({
+    id: typeof message.id === 'string' ? message.id : crypto.randomUUID(),
+    authorId: cleanText(message.authorId || '', 'El autor del mensaje', 100),
+    authorName: cleanText(message.authorName, 'El nombre del autor', 60),
+    text: cleanText(message.text, 'El mensaje', 500),
+    createdAt: typeof message.createdAt === 'string' ? message.createdAt : new Date().toISOString()
+  }));
+}
+
+function normalizePhotos(input) {
+  if (!Array.isArray(input) || input.length > 200) throw new HttpError(400, 'El álbum no es válido.');
+  return input.map(photo => {
+    if (!photo || typeof photo !== 'object' || typeof photo.data !== 'string' || !/^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/.test(photo.data) || photo.data.length > 2_500_000) {
+      throw new HttpError(400, 'La foto no es válida o pesa demasiado.');
+    }
+    return {
+      id: typeof photo.id === 'string' ? photo.id : crypto.randomUUID(),
+      authorId: cleanText(photo.authorId || '', 'El autor de la foto', 100),
+      authorName: cleanText(photo.authorName, 'El nombre del autor', 60),
+      name: cleanText(photo.name || 'Foto del evento', 'El nombre de la foto', 120, false) || 'Foto del evento',
+      data: photo.data,
+      createdAt: typeof photo.createdAt === 'string' ? photo.createdAt : new Date().toISOString()
     };
   });
 }
@@ -310,6 +338,8 @@ function createEventRecord(body, ownerUserId = null) {
     tasks: normalizeTasks(body.tasks),
     dateOptions: normalizeDateOptions(body.dateOptions),
     expenses: normalizeExpenses(body.expenses || []),
+    chatMessages: [],
+    photos: [],
     notifications: [],
     createdAt: new Date().toISOString()
   };
@@ -433,13 +463,17 @@ function eventForAuthenticatedUser(record, request, user) {
           tasks JSONB NOT NULL,
           date_options JSONB NOT NULL,
           expenses JSONB NOT NULL DEFAULT '[]'::jsonb,
+          chat_messages JSONB NOT NULL DEFAULT '[]'::jsonb,
+          photos JSONB NOT NULL DEFAULT '[]'::jsonb,
           notifications JSONB NOT NULL DEFAULT '[]'::jsonb,
           created_at TIMESTAMPTZ NOT NULL
         )
       `);
       await pool.query('ALTER TABLE invitation_events ADD COLUMN IF NOT EXISTS owner_user_id TEXT REFERENCES organizers(id) ON DELETE SET NULL');
       await pool.query("ALTER TABLE invitation_events ADD COLUMN IF NOT EXISTS notifications JSONB NOT NULL DEFAULT '[]'::jsonb");
-      const result = await pool.query('SELECT id, client_event_id, owner_user_id, token, owner_token, event, attendees, tasks, date_options, expenses, notifications, created_at FROM invitation_events ORDER BY created_at');
+      await pool.query("ALTER TABLE invitation_events ADD COLUMN IF NOT EXISTS chat_messages JSONB NOT NULL DEFAULT '[]'::jsonb");
+      await pool.query("ALTER TABLE invitation_events ADD COLUMN IF NOT EXISTS photos JSONB NOT NULL DEFAULT '[]'::jsonb");
+      const result = await pool.query('SELECT id, client_event_id, owner_user_id, token, owner_token, event, attendees, tasks, date_options, expenses, chat_messages, photos, notifications, created_at FROM invitation_events ORDER BY created_at');
       records = result.rows.map(row => ({
         id: row.id,
         clientEventId: row.client_event_id,
@@ -451,6 +485,8 @@ function eventForAuthenticatedUser(record, request, user) {
         tasks: normalizeTasks(row.tasks),
         dateOptions: row.date_options,
         expenses: row.expenses || [],
+        chatMessages: normalizeChatMessages(row.chat_messages || []),
+        photos: normalizePhotos(row.photos || []),
         notifications: row.notifications || [],
         createdAt: new Date(row.created_at).toISOString()
       }));
@@ -487,8 +523,8 @@ function eventForAuthenticatedUser(record, request, user) {
         for (const record of records) {
           await client.query(`
             INSERT INTO invitation_events
-              (id, client_event_id, owner_user_id, token, owner_token, event, attendees, tasks, date_options, expenses, notifications, created_at)
-            VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7::jsonb, $8::jsonb, $9::jsonb, $10::jsonb, $11::jsonb, $12)
+              (id, client_event_id, owner_user_id, token, owner_token, event, attendees, tasks, date_options, expenses, chat_messages, photos, notifications, created_at)
+            VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7::jsonb, $8::jsonb, $9::jsonb, $10::jsonb, $11::jsonb, $12::jsonb, $13::jsonb, $14)
             ON CONFLICT (id) DO UPDATE SET
               client_event_id = EXCLUDED.client_event_id,
               owner_user_id = EXCLUDED.owner_user_id,
@@ -499,6 +535,8 @@ function eventForAuthenticatedUser(record, request, user) {
               tasks = EXCLUDED.tasks,
               date_options = EXCLUDED.date_options,
               expenses = EXCLUDED.expenses,
+              chat_messages = EXCLUDED.chat_messages,
+              photos = EXCLUDED.photos,
               notifications = EXCLUDED.notifications
           `, [
             record.id,
@@ -511,6 +549,8 @@ function eventForAuthenticatedUser(record, request, user) {
             JSON.stringify(record.tasks),
             JSON.stringify(record.dateOptions),
             JSON.stringify(record.expenses || []),
+            JSON.stringify(record.chatMessages || []),
+            JSON.stringify(record.photos || []),
             JSON.stringify(record.notifications || []),
             record.createdAt
           ]);
@@ -538,6 +578,15 @@ function eventForAuthenticatedUser(record, request, user) {
     });
     mutationQueue = operation.then(() => undefined, () => undefined);
     return operation;
+  }
+
+  function getCommunityViewer(record, request) {
+    const organizer = request.headers['x-organizer-token'] && request.headers['x-organizer-token'] === record.ownerToken;
+    const attendee = record.attendees.find(person => person.privateToken === request.headers['x-attendee-token']);
+    if (!organizer && (!attendee || !['Confirmado', 'Confirmada'].includes(attendee.status))) {
+      throw new HttpError(403, 'Solo las personas confirmadas pueden acceder a esta sección.');
+    }
+    return { organizer, attendee };
   }
 
   async function handleApi(request, response, url) {
@@ -740,6 +789,38 @@ function eventForAuthenticatedUser(record, request, user) {
       const record = records.find(item => item.token === inviteMatch[1]);
       if (!record) throw new HttpError(404, 'La invitación no existe o ha caducado.');
        sendJson(response, 200, publicInvitation(record, request));
+      return;
+    }
+
+    const communityMatch = url.pathname.match(/^\/api\/invitations\/([A-Za-z0-9_-]{32})\/(chat|photos)$/);
+    if (communityMatch) {
+      const body = request.method === 'POST' ? await readJsonBody(request) : null;
+      const result = await mutateStore(() => {
+        const record = records.find(item => item.token === communityMatch[1]);
+        if (!record) throw new HttpError(404, 'La invitación no existe o ha caducado.');
+        const viewer = getCommunityViewer(record, request);
+        if (request.method === 'GET') {
+          return {
+            chatMessages: record.chatMessages || [],
+            photos: record.photos || []
+          };
+        }
+        if (communityMatch[2] === 'chat') {
+          const text = cleanText(body && body.text, 'El mensaje', 500);
+          const authorId = viewer.organizer ? `organizer:${record.ownerToken}` : viewer.attendee.id;
+          const authorName = viewer.organizer ? (record.attendees[0]?.name || 'Organizador') : viewer.attendee.name;
+          const message = { id: crypto.randomUUID(), authorId, authorName, text, createdAt: new Date().toISOString() };
+          record.chatMessages = normalizeChatMessages([...(record.chatMessages || []), message]).slice(-1000);
+        } else {
+          if (!body || typeof body.data !== 'string') throw new HttpError(400, 'Selecciona una imagen.');
+          const authorId = viewer.organizer ? `organizer:${record.ownerToken}` : viewer.attendee.id;
+          const authorName = viewer.organizer ? (record.attendees[0]?.name || 'Organizador') : viewer.attendee.name;
+          const photo = { id: crypto.randomUUID(), authorId, authorName, name: body.name || 'Foto del evento', data: body.data, createdAt: new Date().toISOString() };
+          record.photos = normalizePhotos([...(record.photos || []), photo]).slice(-200);
+        }
+        return { chatMessages: record.chatMessages || [], photos: record.photos || [] };
+      });
+      sendJson(response, request.method === 'POST' ? 201 : 200, result);
       return;
     }
 
