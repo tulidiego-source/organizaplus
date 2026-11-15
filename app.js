@@ -78,12 +78,14 @@ let dateOptions = [
 let toastTimer;
 let selectedDate = '';
 let currentVote = '';
+let eventNotifications = [];
 let currentTab = 'overview';
 let currentEvent = eventTemplates[0];
 let wizardStep = 0;
 let wizardInvitees = [];
 let wizardDates = [];
 let wizardTasks = [];
+let editingEventId = null;
 const storageKey = 'organiza-plus.data.v1';
 let activeInviteToken = '';
 let inviteRefreshInProgress = false;
@@ -185,7 +187,7 @@ function renderEventImagePicker() {
   const picker = $('#event-image-picker');
   if (!picker) return;
   picker.innerHTML = Array.from({ length: eventImageCount }, (_, index) => `
-    <button type="button" class="image-choice ${index === wizardImageIndex ? 'selected' : ''}" data-event-image="${index}" style="${spriteStyle('eventos.png', index, 3, 3)}" aria-label="Imagen de evento ${index + 1}"></button>
+    <button type="button" class="image-choice ${index === wizardImageIndex ? 'selected' : ''}" data-event-image="${index}" style="${spriteStyle('/eventos.png', index, 3, 3)}" aria-label="Imagen de evento ${index + 1}"></button>
   `).join('');
 }
 
@@ -193,7 +195,7 @@ function renderAvatarPicker() {
   const picker = $('#avatar-picker');
   if (!picker) return;
   picker.innerHTML = Array.from({ length: avatarImageCount }, (_, index) => `
-    <button type="button" class="image-choice ${index === selectedAvatarIndex ? 'selected' : ''}" data-avatar-index="${index}" style="${spriteStyle('avatars.png', index, 4, 3)}" aria-label="Avatar ${index + 1}"></button>
+    <button type="button" class="image-choice ${index === selectedAvatarIndex ? 'selected' : ''}" data-avatar-index="${index}" style="${spriteStyle('/avatars.png', index, 4, 3)}" aria-label="Avatar ${index + 1}"></button>
   `).join('');
 }
 
@@ -282,7 +284,8 @@ function saveCurrentEventData() {
     expenses: cloneData(expenses),
     dateOptions: cloneData(dateOptions),
     selectedDate,
-    currentVote
+    currentVote,
+    notifications: cloneData(eventNotifications)
   };
 }
 
@@ -313,6 +316,7 @@ function restoreEventData(eventId) {
   dateOptions = cloneData(state.dateOptions);
   selectedDate = state.selectedDate;
   currentVote = state.currentVote;
+  eventNotifications = cloneData(state.notifications || []);
 }
 
 function loadPersistedData() {
@@ -398,7 +402,8 @@ async function loadOwnedEvents() {
       expenses: cloneData(event.expenses || []),
       dateOptions: cloneData(event.dateOptions || []),
       selectedDate: event.date,
-      currentVote: ''
+      currentVote: '',
+      notifications: cloneData(event.notifications || [])
     };
   });
   currentEvent = eventTemplates[0];
@@ -429,7 +434,7 @@ function updateProfileUi() {
   if (profileRole) profileRole.textContent = authUser.email || 'Organizador';
   if (profileAvatar) {
     const avatarIndex = Number.isInteger(Number(authUser.avatar)) ? Number(authUser.avatar) : 0;
-    profileAvatar.style = spriteStyle('avatars.png', avatarIndex, 4, 3);
+    profileAvatar.style = spriteStyle('/avatars.png', avatarIndex, 4, 3);
     profileAvatar.textContent = '';
   }
 }
@@ -563,6 +568,31 @@ function openDeleteConfirmation() {
   openDialog('#delete-confirm-modal');
 }
 
+function startEventEdit() {
+  if (!currentEvent || currentEvent.id === 'empty-workspace') return;
+  editingEventId = currentEvent.id;
+  $('#event-actions-modal').close();
+  $('#event-form').reset();
+  $('#event-name').value = currentEvent.name;
+  $('#event-type').value = currentEvent.type;
+  $('#event-guests').value = currentEvent.capacity || 20;
+  $('#event-description').value = currentEvent.description || '';
+  $('#event-location').value = currentEvent.location || '';
+  $('#event-allow-guests').checked = currentEvent.allowGuests !== false;
+  wizardImageIndex = Number.isInteger(currentEvent.imageIndex) ? currentEvent.imageIndex : 0;
+  wizardStep = 0;
+  wizardInvitees = [];
+  wizardDates = [{ date: currentEvent.date, time: currentEvent.time || '14:00' }];
+  wizardTasks = cloneData(tasks.length ? tasks : [{ name: 'Comida para compartir', quantity: 'Para el grupo', person: '' }]);
+  renderEventImagePicker();
+  renderWizardInvites();
+  renderWizardDates();
+  renderWizardTasks();
+  $('#wizard-finish').innerHTML = 'Guardar cambios <span>✓</span>';
+  openDialog('#event-modal');
+  updateWizardStep();
+}
+
 function getEventStatePayload() {
   saveCurrentEventData();
   return eventStates[currentEvent.id];
@@ -611,10 +641,13 @@ async function refreshRemoteAttendees(showError = false) {
   updateInviteSyncStatus('Actualizando confirmaciones…');
   try {
     const invitation = await requestApi(`/api/invitations/${encodeURIComponent(currentEvent.inviteToken)}`);
+    currentEvent = { ...currentEvent, ...(invitation.event || {}) };
+    eventTemplates = eventTemplates.map(event => event.id === currentEvent.id ? currentEvent : event);
     const refreshedAttendees = invitation.attendees;
     tasks = invitation.tasks;
     dateOptions = invitation.dateOptions;
     expenses = invitation.expenses || [];
+    eventNotifications = invitation.notifications || [];
     if (JSON.stringify(attendees) !== JSON.stringify(refreshedAttendees)) {
       attendees = refreshedAttendees;
     }
@@ -908,7 +941,7 @@ function renderCurrentEvent() {
   const heroImage = document.querySelector('.hero-image');
   if (heroImage) {
     const imageIndex = Number.isInteger(currentEvent.imageIndex) ? currentEvent.imageIndex : 0;
-    heroImage.style.backgroundImage = "url('eventos.png')";
+    heroImage.style.backgroundImage = "url('/eventos.png')";
     heroImage.style.backgroundSize = '300% 300%';
     heroImage.style.backgroundPosition = `${(imageIndex % 3) * 50}% ${Math.floor(imageIndex / 3) * 50}%`;
     heroImage.classList.add('event-image-selected');
@@ -968,6 +1001,15 @@ function renderNotifications() {
   const pendingAttendees = attendees.filter(person => person.status === 'Pendiente').length;
   const unassignedTasks = tasks.filter(task => !task.person).length;
   const notifications = [];
+
+  eventNotifications.slice().reverse().forEach(notification => {
+    notifications.push({
+      icon: '!',
+      title: notification.title || 'Evento actualizado',
+      detail: notification.detail || 'Hay cambios nuevos en este evento.',
+      tab: 'overview'
+    });
+  });
 
   if (pendingAttendees) {
     notifications.push({ icon: '♙', title: `${pendingAttendees} persona${pendingAttendees === 1 ? '' : 's'} por confirmar`, detail: `Revisa quién falta por responder en «${currentEvent.name}».`, tab: 'attendees' });
@@ -1055,6 +1097,7 @@ $('#invite-button').addEventListener('click', openInviteFlow);
 $('#share-button').addEventListener('click', openInviteFlow);
 $('#create-event-button').addEventListener('click', startEventWizard);
 $('#delete-event-button').addEventListener('click', openEventActions);
+$('#edit-event-button').addEventListener('click', startEventEdit);
 $('#open-delete-confirm').addEventListener('click', openDeleteConfirmation);
 $('#cancel-delete').addEventListener('click', () => $('#delete-confirm-modal').close());
 $('#confirm-delete').addEventListener('click', deleteCurrentEvent);
@@ -1168,6 +1211,7 @@ function localDateAfter(days) {
 }
 
 function startEventWizard() {
+  editingEventId = null;
   $('#event-form').reset();
   wizardStep = 0;
   wizardImageIndex = 0;
@@ -1181,6 +1225,7 @@ function startEventWizard() {
   renderWizardInvites();
   renderWizardDates();
   renderWizardTasks();
+  $('#wizard-finish').innerHTML = 'Crear evento <span>✓</span>';
   updateWizardStep();
   openDialog('#event-modal');
 }
@@ -1398,6 +1443,57 @@ $('#add-wizard-task').addEventListener('click', () => {
 async function completeEventWizard() {
   if (!validateWizardStep()) return;
   const form = new FormData($('#event-form'));
+  if (editingEventId) {
+    const selectedOption = wizardDates[0];
+    if (!selectedOption || !selectedOption.date || !selectedOption.time) {
+      showToast('Completa el día y la hora del evento.');
+      return;
+    }
+    const nextEvent = {
+      ...currentEvent,
+      name: String(form.get('name') || '').trim(),
+      type: String(form.get('type') || 'Evento'),
+      date: selectedOption.date,
+      time: selectedOption.time,
+      location: String(form.get('location') || '').trim(),
+      description: String(form.get('description') || '').trim(),
+      capacity: Number(form.get('guests')) || 20,
+      allowGuests: form.get('allowGuests') === 'on',
+      imageIndex: wizardImageIndex
+    };
+    const finishButton = $('#wizard-finish');
+    finishButton.disabled = true;
+    try {
+      if (currentEvent.inviteToken) {
+        const invitation = await requestApi(`/api/invitations/${encodeURIComponent(currentEvent.inviteToken)}/event`, {
+          method: 'PATCH',
+          headers: { 'X-Organizer-Token': currentEvent.ownerToken || '' },
+          body: JSON.stringify({ event: nextEvent })
+        });
+        currentEvent = { ...currentEvent, ...invitation.event };
+        eventNotifications = invitation.notifications || eventNotifications;
+      } else {
+        currentEvent = nextEvent;
+      }
+      eventTemplates = eventTemplates.map(event => event.id === editingEventId ? currentEvent : event);
+      tasks = wizardTasks.filter(task => task.name && task.name.trim()).map(task => ({ ...task, name: task.name.trim(), quantity: (task.quantity || '').trim() }));
+      dateOptions = [{ date: currentEvent.date, time: currentEvent.time, votes: 1 }];
+      selectedDate = currentEvent.date;
+      saveCurrentEventData();
+      renderAll();
+      persistAppState();
+      $('#event-modal').close();
+      showToast('Evento actualizado. El grupo verá el aviso al sincronizar.');
+    } catch (error) {
+      console.error('Unable to update event.', error);
+      showToast(error.message);
+    } finally {
+      finishButton.disabled = false;
+      editingEventId = null;
+      $('#wizard-finish').innerHTML = 'Crear evento <span>✓</span>';
+    }
+    return;
+  }
   const chosenVote = $('#wizard-vote-choice input:checked').value;
   const selectedOption = wizardDates.find(option => `${option.date}-${option.time}` === chosenVote);
   if (!selectedOption) {
@@ -1601,7 +1697,8 @@ async function loadInvitationFromLink() {
       expenses: existingState ? cloneData(existingState.expenses) : [],
       dateOptions: existingState ? cloneData(existingState.dateOptions) : cloneData(invitation.dateOptions),
       selectedDate: existingState ? existingState.selectedDate : remoteEvent.date,
-      currentVote: existingState ? existingState.currentVote : ''
+      currentVote: existingState ? existingState.currentVote : '',
+      notifications: cloneData(invitation.notifications || [])
     };
     currentEvent = remoteEvent;
     restoreEventData(remoteEvent.id);

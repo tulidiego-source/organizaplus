@@ -155,7 +155,8 @@ function publicInvitation(record) {
     attendees: publicAttendees(record.attendees),
     tasks: record.tasks,
     dateOptions: record.dateOptions,
-    expenses: record.expenses || []
+    expenses: record.expenses || [],
+    notifications: record.notifications || []
   };
 }
 
@@ -295,6 +296,7 @@ function createEventRecord(body, ownerUserId = null) {
     tasks: normalizeTasks(body.tasks),
     dateOptions: normalizeDateOptions(body.dateOptions),
     expenses: normalizeExpenses(body.expenses || []),
+    notifications: [],
     createdAt: new Date().toISOString()
   };
 }
@@ -354,7 +356,8 @@ function createAppServer(options = {}) {
       attendees: publicAttendees(record.attendees),
       tasks: record.tasks,
       dateOptions: record.dateOptions,
-      expenses: record.expenses || []
+      expenses: record.expenses || [],
+      notifications: record.notifications || []
     };
   }
   const configuredUrl = options.publicAppUrl || process.env.PUBLIC_APP_URL || '';
@@ -403,11 +406,13 @@ function createAppServer(options = {}) {
           tasks JSONB NOT NULL,
           date_options JSONB NOT NULL,
           expenses JSONB NOT NULL DEFAULT '[]'::jsonb,
+          notifications JSONB NOT NULL DEFAULT '[]'::jsonb,
           created_at TIMESTAMPTZ NOT NULL
         )
       `);
       await pool.query('ALTER TABLE invitation_events ADD COLUMN IF NOT EXISTS owner_user_id TEXT REFERENCES organizers(id) ON DELETE SET NULL');
-      const result = await pool.query('SELECT id, client_event_id, owner_user_id, token, owner_token, event, attendees, tasks, date_options, expenses, created_at FROM invitation_events ORDER BY created_at');
+      await pool.query("ALTER TABLE invitation_events ADD COLUMN IF NOT EXISTS notifications JSONB NOT NULL DEFAULT '[]'::jsonb");
+      const result = await pool.query('SELECT id, client_event_id, owner_user_id, token, owner_token, event, attendees, tasks, date_options, expenses, notifications, created_at FROM invitation_events ORDER BY created_at');
       records = result.rows.map(row => ({
         id: row.id,
         clientEventId: row.client_event_id,
@@ -419,6 +424,7 @@ function createAppServer(options = {}) {
         tasks: row.tasks,
         dateOptions: row.date_options,
         expenses: row.expenses || [],
+        notifications: row.notifications || [],
         createdAt: new Date(row.created_at).toISOString()
       }));
       if (!records.length) {
@@ -454,8 +460,8 @@ function createAppServer(options = {}) {
         for (const record of records) {
           await client.query(`
             INSERT INTO invitation_events
-              (id, client_event_id, owner_user_id, token, owner_token, event, attendees, tasks, date_options, expenses, created_at)
-            VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7::jsonb, $8::jsonb, $9::jsonb, $10::jsonb, $11)
+              (id, client_event_id, owner_user_id, token, owner_token, event, attendees, tasks, date_options, expenses, notifications, created_at)
+            VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7::jsonb, $8::jsonb, $9::jsonb, $10::jsonb, $11::jsonb, $12)
             ON CONFLICT (id) DO UPDATE SET
               client_event_id = EXCLUDED.client_event_id,
               owner_user_id = EXCLUDED.owner_user_id,
@@ -465,7 +471,8 @@ function createAppServer(options = {}) {
               attendees = EXCLUDED.attendees,
               tasks = EXCLUDED.tasks,
               date_options = EXCLUDED.date_options,
-              expenses = EXCLUDED.expenses
+              expenses = EXCLUDED.expenses,
+              notifications = EXCLUDED.notifications
           `, [
             record.id,
             record.clientEventId,
@@ -477,6 +484,7 @@ function createAppServer(options = {}) {
             JSON.stringify(record.tasks),
             JSON.stringify(record.dateOptions),
             JSON.stringify(record.expenses || []),
+            JSON.stringify(record.notifications || []),
             record.createdAt
           ]);
         }
@@ -629,6 +637,54 @@ function createAppServer(options = {}) {
         };
       });
       sendJson(response, 201, result);
+      return;
+    }
+
+    const eventUpdateMatch = url.pathname.match(/^\/api\/invitations\/([A-Za-z0-9_-]{32})\/event$/);
+    if (request.method === 'PATCH' && eventUpdateMatch) {
+      const body = await readJsonBody(request);
+      const result = await mutateStore(() => {
+        const record = records.find(item => item.token === eventUpdateMatch[1]);
+        if (!record) throw new HttpError(404, 'La invitación no existe o ha caducado.');
+        if (!record.ownerToken || request.headers['x-organizer-token'] !== record.ownerToken) {
+          throw new HttpError(403, 'No tienes permiso para editar este evento.');
+        }
+        const source = body && body.event;
+        if (!source || !isValidDate(source.date) || !isValidTime(source.time || '14:00')) {
+          throw new HttpError(400, 'La fecha y hora del evento no son válidas.');
+        }
+        const nextEvent = {
+          ...record.event,
+          name: cleanText(source.name, 'El nombre del evento', 60),
+          type: cleanText(source.type, 'El tipo de evento', 40),
+          date: source.date,
+          time: source.time || '14:00',
+          location: cleanText(source.location, 'El lugar', 80),
+          description: cleanText(source.description || '', 'La descripción', 160, false),
+          capacity: Number(source.capacity),
+          allowGuests: source.allowGuests === true,
+          imageIndex: Number.isInteger(source.imageIndex) && source.imageIndex >= 0 && source.imageIndex < 9 ? source.imageIndex : 0
+        };
+        if (!Number.isInteger(nextEvent.capacity) || nextEvent.capacity < attendeeHeadcount(record.attendees) || nextEvent.capacity > 200) {
+          throw new HttpError(400, 'El aforo no puede ser menor que los asistentes actuales y debe estar entre 2 y 200.');
+        }
+        const oldEvent = record.event;
+        const changes = [];
+        if (oldEvent.location !== nextEvent.location) changes.push(`Lugar: ${nextEvent.location}`);
+        if (oldEvent.date !== nextEvent.date) changes.push(`Día: ${nextEvent.date}`);
+        if (oldEvent.time !== nextEvent.time) changes.push(`Hora: ${nextEvent.time}`);
+        record.event = nextEvent;
+        if (changes.length) {
+          record.notifications = [...(record.notifications || []), {
+            id: crypto.randomUUID(),
+            title: 'Evento actualizado',
+            detail: `El organizador ha cambiado ${changes.join(' · ')}.`,
+            createdAt: new Date().toISOString()
+          }].slice(-20);
+        }
+        return publicInvitation(record);
+      });
+      sendJson(response, 200, result);
       return;
     }
 
