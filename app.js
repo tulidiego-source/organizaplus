@@ -347,7 +347,8 @@ function loadPersistedData() {
     return;
   }
 
-  eventTemplates = storedData.events;
+  const storedRealEvents = storedData.events.filter(event => event.id !== 'empty-workspace');
+  eventTemplates = storedRealEvents.length ? storedRealEvents : storedData.events;
   eventStates = storedData.eventStates;
   joinedInvitationNames = storedData.joinedInvitationNames && typeof storedData.joinedInvitationNames === 'object'
     ? storedData.joinedInvitationNames
@@ -355,7 +356,7 @@ function loadPersistedData() {
   joinedInvitationTokens = storedData.joinedInvitationTokens && typeof storedData.joinedInvitationTokens === 'object'
     ? storedData.joinedInvitationTokens
     : {};
-  currentEvent = eventTemplates.find(event => event.id === storedData.currentEventId);
+  currentEvent = eventTemplates.find(event => event.id === storedData.currentEventId) || eventTemplates[0];
   restoreEventData(currentEvent.id);
 }
 
@@ -959,6 +960,12 @@ function renderExpenses() {
 function renderDateOptions() {
   const container = $('#date-options');
   if (!container) return;
+  const hasVotingOptions = Array.isArray(dateOptions) && dateOptions.length > 1;
+  $('.date-panel').classList.toggle('hidden', !hasVotingOptions || currentTab !== 'overview');
+  if (!hasVotingOptions) {
+    container.innerHTML = '';
+    return;
+  }
   const maxVotes = Math.max(1, ...dateOptions.map(option => option.votes));
   container.innerHTML = dateOptions.map(option => `
     <button class="date-option ${selectedDate === option.date ? 'selected' : ''}" data-date="${option.date}" type="button">
@@ -1812,7 +1819,7 @@ async function loadInvitationFromLink() {
       inviteUrl: `${window.location.origin}/join/${activeInviteToken}`
     };
     const existingState = eventStates[remoteEvent.id];
-    eventTemplates = [remoteEvent, ...eventTemplates.filter(event => event.id !== remoteEvent.id)];
+    eventTemplates = [remoteEvent, ...eventTemplates.filter(event => event.id !== remoteEvent.id && event.id !== 'empty-workspace')];
     eventStates[remoteEvent.id] = {
       attendees: cloneData(invitation.attendees),
       tasks: cloneData(invitation.tasks),
