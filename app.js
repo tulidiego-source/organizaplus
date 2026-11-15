@@ -500,6 +500,20 @@ function updateJoinAuthenticationUi() {
   const submitButton = $('#join-submit');
   if (!accountStatus || !loginButton || !guestButton || !guestFields || !partyFields || !nameInput) return;
 
+  if (editingOwnAttendance) {
+    accountStatus.classList.toggle('hidden', !authUser);
+    if (authUser) accountStatus.textContent = `Editando la asistencia de ${authUser.name}.`;
+    loginButton.classList.add('hidden');
+    guestButton.classList.add('hidden');
+    guestFields.classList.remove('hidden');
+    partyFields.classList.remove('hidden');
+    submitButton.classList.remove('hidden');
+    submitButton.innerHTML = 'Guardar cambios <span>✓</span>';
+    nameInput.readOnly = true;
+    nameInput.required = false;
+    return;
+  }
+
   if (authUser) {
     accountStatus.textContent = `Entrarás como ${authUser.name}.`;
     accountStatus.classList.remove('hidden');
@@ -508,6 +522,7 @@ function updateJoinAuthenticationUi() {
     guestFields.classList.add('hidden');
     partyFields.classList.remove('hidden');
     submitButton.classList.remove('hidden');
+    submitButton.innerHTML = 'Sí, me uno <span>✓</span>';
     nameInput.value = authUser.name;
     nameInput.readOnly = true;
     nameInput.required = false;
@@ -521,6 +536,7 @@ function updateJoinAuthenticationUi() {
   guestFields.classList.add('hidden');
   partyFields.classList.add('hidden');
   submitButton.classList.add('hidden');
+  submitButton.innerHTML = 'Sí, me uno <span>✓</span>';
   nameInput.value = '';
   nameInput.readOnly = false;
   nameInput.required = false;
@@ -1222,14 +1238,18 @@ $('#attendee-list').addEventListener('click', event => {
     const me = attendees.find(person => person.id === currentViewerAttendeeId);
     if (!me) return;
     editingOwnAttendance = true;
+    activeInviteToken = activeInviteToken || currentEvent.inviteToken || '';
+    currentViewerAttendeeId = me.id;
     $('#join-name').value = me.name;
     $('#join-name').readOnly = true;
     $('#join-guest-fields').classList.remove('hidden');
     $('#join-party-fields').classList.remove('hidden');
     $('#join-submit').classList.remove('hidden');
+    $('#join-submit').innerHTML = 'Guardar cambios <span>✓</span>';
     $('#join-adults').value = Math.max(0, (me.adults || 1) - 1);
     $('#join-children').value = me.children || 0;
     $('#join-feedback').textContent = '';
+    updateJoinAuthenticationUi();
     openDialog('#join-modal');
     return;
   }
@@ -1888,6 +1908,7 @@ $('#join-form').addEventListener('submit', async event => {
       attendees = updated.attendees;
       eventNotifications = updated.notifications || eventNotifications;
       editingOwnAttendance = false;
+      $('#join-submit').innerHTML = 'Sí, me uno <span>✓</span>';
       $('#join-modal').close();
       renderAll();
       persistAppState();
