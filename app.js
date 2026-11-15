@@ -1113,6 +1113,17 @@ function setTab(tab) {
   $('#inbox-view').classList.toggle('hidden', currentTab !== 'inbox');
   $$('.sidebar .nav-link[data-tab]').forEach(button => button.classList.toggle('active', button.dataset.tab === currentTab));
   if (['chat', 'photos'].includes(currentTab)) loadCommunity();
+  if (currentTab === 'inbox' && currentEvent.inviteToken) {
+    const viewerKey = currentEvent.ownerToken
+      ? `organizer:${currentEvent.ownerToken}`
+      : (currentViewerAttendeeId ? `attendee:${currentViewerAttendeeId}` : '');
+    const unreadCount = eventNotifications.filter(notification => !viewerKey || !Array.isArray(notification.readBy) || !notification.readBy.includes(viewerKey)).length;
+    const noticeKey = `organizat.notifications.notice.${currentEvent.inviteToken}`;
+    if (unreadCount > 0 && !localStorage.getItem(noticeKey)) {
+      localStorage.setItem(noticeKey, 'shown');
+      window.setTimeout(() => showToast(`Tienes ${unreadCount} notificación${unreadCount === 1 ? '' : 'es'} pendiente${unreadCount === 1 ? '' : 's'} de leer.`), 120);
+    }
+  }
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
@@ -1152,10 +1163,13 @@ async function loadCommunity(force = false) {
   try {
     const result = await requestApi(`/api/invitations/${encodeURIComponent(currentEvent.inviteToken)}/chat`, { headers: communityHeaders() });
     communityMessages = result.chatMessages || [];
+    eventNotifications = result.notifications || eventNotifications;
     const photosResult = await requestApi(`/api/invitations/${encodeURIComponent(currentEvent.inviteToken)}/photos`, { headers: communityHeaders() });
     eventPhotos = photosResult.photos || [];
+    eventNotifications = photosResult.notifications || eventNotifications;
     communityLoadedToken = currentEvent.inviteToken;
     renderCommunity();
+    renderNotifications();
   } catch (error) {
     if (currentTab === 'chat' || currentTab === 'photos') showToast(error.message);
   } finally {
@@ -1186,9 +1200,11 @@ $('#chat-form').addEventListener('submit', async event => {
   try {
     const result = await requestApi(`/api/invitations/${encodeURIComponent(currentEvent.inviteToken)}/chat`, { method: 'POST', headers: communityHeaders(), body: JSON.stringify({ text }) });
     communityMessages = result.chatMessages || [];
+    eventNotifications = result.notifications || eventNotifications;
     input.value = '';
     communityLoadedToken = currentEvent.inviteToken;
     renderCommunity();
+    renderNotifications();
   } catch (error) { showToast(error.message); }
 });
 
@@ -1200,8 +1216,10 @@ $('#photo-input').addEventListener('change', async event => {
     const data = await compressPhoto(file);
     const result = await requestApi(`/api/invitations/${encodeURIComponent(currentEvent.inviteToken)}/photos`, { method: 'POST', headers: communityHeaders(), body: JSON.stringify({ name: file.name.replace(/\.[^.]+$/, ''), data }) });
     eventPhotos = result.photos || [];
+    eventNotifications = result.notifications || eventNotifications;
     communityLoadedToken = currentEvent.inviteToken;
     renderCommunity();
+    renderNotifications();
     showToast('Foto compartida con el grupo.');
   } catch (error) { showToast(error.message || 'No se pudo compartir la foto.'); }
 });
@@ -1214,6 +1232,16 @@ function renderNotifications() {
   const pendingAttendees = attendees.filter(person => person.status === 'Pendiente').length;
   const unassignedTasks = tasks.filter(task => !task.person).length;
   const notifications = [];
+  const viewerKey = currentEvent.ownerToken
+    ? `organizer:${currentEvent.ownerToken}`
+    : (currentViewerAttendeeId ? `attendee:${currentViewerAttendeeId}` : '');
+  const unreadCount = eventNotifications.filter(notification => !viewerKey || !Array.isArray(notification.readBy) || !notification.readBy.includes(viewerKey)).length;
+  const pendingBanner = $('#notification-pending-banner');
+  const pendingText = $('#notification-pending-text');
+  if (pendingBanner && pendingText) {
+    pendingBanner.classList.toggle('hidden', unreadCount === 0);
+    pendingText.textContent = `Tienes ${unreadCount} notificación${unreadCount === 1 ? '' : 'es'} pendiente${unreadCount === 1 ? '' : 's'} de leer.`;
+  }
 
   eventNotifications.slice().reverse().forEach(notification => {
     notifications.push({
@@ -1246,6 +1274,18 @@ function renderNotifications() {
   `).join('');
   $$('#notifications-list [data-notification-tab]').forEach(button => button.addEventListener('click', () => setTab(button.dataset.notificationTab)));
 }
+
+async function markNotificationsRead() {
+  if (!currentEvent.inviteToken) return;
+  try {
+    const result = await requestApi(`/api/invitations/${encodeURIComponent(currentEvent.inviteToken)}/notifications/read`, { method: 'PATCH', headers: communityHeaders() });
+    eventNotifications = result.notifications || [];
+    renderNotifications();
+    showToast('Notificaciones marcadas como leídas.');
+  } catch (error) { showToast(error.message); }
+}
+
+$('#mark-notifications-read').addEventListener('click', markNotificationsRead);
 
 $('#confirm-button').addEventListener('click', async () => {
   const me = attendees.find(person => person.id === currentViewerAttendeeId) || attendees[0];

@@ -183,10 +183,32 @@ function publicAttendees(attendees) {
   return attendees.map(({ email, privateToken, accountUserId, ...person }) => person);
 }
 
+function notificationViewerKey(record, request, attendeeOverride = null) {
+  if (request && request.headers['x-organizer-token'] === record.ownerToken) return `organizer:${record.ownerToken}`;
+  const attendee = attendeeOverride || record.attendees.find(person => person.privateToken === request?.headers['x-attendee-token']);
+  return attendee ? `attendee:${attendee.id}` : '';
+}
+
+function unreadNotifications(notifications, viewerKey) {
+  if (!viewerKey) return notifications.length;
+  return notifications.filter(notification => !Array.isArray(notification.readBy) || !notification.readBy.includes(viewerKey)).length;
+}
+
+function notificationsForViewer(record, viewerKey) {
+  const organizer = viewerKey.startsWith('organizer:');
+  const attendeeId = viewerKey.startsWith('attendee:') ? viewerKey.slice('attendee:'.length) : '';
+  return (record.notifications || []).filter(notification =>
+    (notification.audience === 'all' && !notification.recipientId)
+    || (organizer && notification.audience === 'organizer')
+    || (attendeeId && notification.recipientId === attendeeId)
+  );
+}
+
 function publicInvitation(record, request) {
   const attendeeToken = request && request.headers['x-attendee-token'];
   const isOrganizer = request && request.headers['x-organizer-token'] && request.headers['x-organizer-token'] === record.ownerToken;
   const viewer = record.attendees.find(person => person.privateToken === attendeeToken);
+  const viewerKey = notificationViewerKey(record, request, viewer);
   const notifications = (record.notifications || []).filter(notification =>
     (notification.audience === 'all' && !notification.recipientId)
     || (isOrganizer && notification.audience === 'organizer')
@@ -198,7 +220,8 @@ function publicInvitation(record, request) {
     tasks: record.tasks,
     dateOptions: record.dateOptions,
     expenses: record.expenses || [],
-    notifications
+    notifications,
+    unreadNotifications: unreadNotifications(notifications, viewerKey)
   };
 }
 
@@ -389,7 +412,8 @@ function createAppServer(options = {}) {
     return token;
   }
 
-  function organizerEvent(record, request) {
+  function organizerEvent(record, request, viewerKey = '') {
+    const visibleNotifications = notificationsForViewer(record, viewerKey);
     const baseUrl = getPublicBaseUrl(request, configuredBaseUrl);
     return {
       ...record.event,
@@ -401,15 +425,16 @@ function createAppServer(options = {}) {
       tasks: record.tasks,
       dateOptions: record.dateOptions,
       expenses: record.expenses || [],
-      notifications: record.notifications || []
+      notifications: visibleNotifications,
+      unreadNotifications: unreadNotifications(visibleNotifications, viewerKey)
     };
   }
 
 function eventForAuthenticatedUser(record, request, user) {
-  const event = organizerEvent(record, request);
-  if (record.ownerUserId === user.id) return event;
+  if (record.ownerUserId === user.id) return organizerEvent(record, request, `organizer:${record.ownerToken}`);
   const attendee = record.attendees.find(person => person.accountUserId === user.id);
   if (!attendee) return null;
+  const event = organizerEvent(record, request, `attendee:${attendee.id}`);
   const { ownerToken, ...attendeeEvent } = event;
   return {
     ...attendeeEvent,
@@ -792,6 +817,26 @@ function eventForAuthenticatedUser(record, request, user) {
       return;
     }
 
+    const notificationReadMatch = url.pathname.match(/^\/api\/invitations\/([A-Za-z0-9_-]{32})\/notifications\/read$/);
+    if (request.method === 'PATCH' && notificationReadMatch) {
+      const result = await mutateStore(() => {
+        const record = records.find(item => item.token === notificationReadMatch[1]);
+        if (!record) throw new HttpError(404, 'La invitación no existe o ha caducado.');
+        const viewer = getCommunityViewer(record, request);
+        const viewerKey = notificationViewerKey(record, request, viewer.attendee);
+        record.notifications = (record.notifications || []).map(notification => {
+          const visible = (notification.audience === 'all' && !notification.recipientId)
+            || (viewer.organizer && notification.audience === 'organizer')
+            || (viewer.attendee && notification.recipientId === viewer.attendee.id);
+          if (!visible) return notification;
+          return { ...notification, readBy: Array.from(new Set([...(notification.readBy || []), viewerKey])) };
+        });
+        return publicInvitation(record, request);
+      });
+      sendJson(response, 200, result);
+      return;
+    }
+
     const communityMatch = url.pathname.match(/^\/api\/invitations\/([A-Za-z0-9_-]{32})\/(chat|photos)$/);
     if (communityMatch) {
       const body = request.method === 'POST' ? await readJsonBody(request) : null;
@@ -799,10 +844,13 @@ function eventForAuthenticatedUser(record, request, user) {
         const record = records.find(item => item.token === communityMatch[1]);
         if (!record) throw new HttpError(404, 'La invitación no existe o ha caducado.');
         const viewer = getCommunityViewer(record, request);
+        const visibleNotifications = publicInvitation(record, request);
         if (request.method === 'GET') {
           return {
             chatMessages: record.chatMessages || [],
-            photos: record.photos || []
+            photos: record.photos || [],
+            notifications: visibleNotifications.notifications,
+            unreadNotifications: visibleNotifications.unreadNotifications
           };
         }
         if (communityMatch[2] === 'chat') {
@@ -811,14 +859,28 @@ function eventForAuthenticatedUser(record, request, user) {
           const authorName = viewer.organizer ? (record.attendees[0]?.name || 'Organizador') : viewer.attendee.name;
           const message = { id: crypto.randomUUID(), authorId, authorName, text, createdAt: new Date().toISOString() };
           record.chatMessages = normalizeChatMessages([...(record.chatMessages || []), message]).slice(-1000);
+          record.notifications = [...(record.notifications || []), {
+            id: crypto.randomUUID(), audience: 'all', title: 'Nuevo mensaje en el chat',
+            detail: `${authorName} ha escrito en el chat del evento.`, createdAt: new Date().toISOString(), readBy: []
+          }].slice(-50);
         } else {
           if (!body || typeof body.data !== 'string') throw new HttpError(400, 'Selecciona una imagen.');
           const authorId = viewer.organizer ? `organizer:${record.ownerToken}` : viewer.attendee.id;
           const authorName = viewer.organizer ? (record.attendees[0]?.name || 'Organizador') : viewer.attendee.name;
           const photo = { id: crypto.randomUUID(), authorId, authorName, name: body.name || 'Foto del evento', data: body.data, createdAt: new Date().toISOString() };
           record.photos = normalizePhotos([...(record.photos || []), photo]).slice(-200);
+          record.notifications = [...(record.notifications || []), {
+            id: crypto.randomUUID(), audience: 'all', title: 'Nueva foto del evento',
+            detail: `${authorName} ha compartido una foto con el grupo.`, createdAt: new Date().toISOString(), readBy: []
+          }].slice(-50);
         }
-        return { chatMessages: record.chatMessages || [], photos: record.photos || [] };
+        const updatedNotifications = publicInvitation(record, request);
+        return {
+          chatMessages: record.chatMessages || [],
+          photos: record.photos || [],
+          notifications: updatedNotifications.notifications,
+          unreadNotifications: updatedNotifications.unreadNotifications
+        };
       });
       sendJson(response, request.method === 'POST' ? 201 : 200, result);
       return;
