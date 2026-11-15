@@ -92,6 +92,17 @@ function addDaysToDate(dateValue, days) {
 }
 
 function createEmptyEventState(event) {
+  if (event.id === 'empty-workspace') {
+    return {
+      attendees: [],
+      tasks: [],
+      expenses: [],
+      dateOptions: [],
+      selectedDate: '',
+      currentVote: '',
+      notifications: []
+    };
+  }
   const organizer = { name: 'Diego Navarro', initial: 'D', role: 'Organizador', status: 'Confirmado', color: '#e9c3aa' };
   return {
     attendees: [organizer],
