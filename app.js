@@ -377,18 +377,55 @@ function setAuthMode(mode) {
   $('#auth-feedback').textContent = '';
 }
 
+function updateJoinAuthenticationUi() {
+  const accountStatus = $('#join-account-status');
+  const loginButton = $('#join-login-button');
+  const guestButton = $('#join-guest-button');
+  const guestFields = $('#join-guest-fields');
+  const nameInput = $('#join-name');
+  const submitButton = $('#join-submit');
+  if (!accountStatus || !loginButton || !guestButton || !guestFields || !nameInput) return;
+
+  if (authUser) {
+    accountStatus.textContent = `Entrarás como ${authUser.name}.`;
+    accountStatus.classList.remove('hidden');
+    loginButton.classList.add('hidden');
+    guestButton.classList.add('hidden');
+    guestFields.classList.add('hidden');
+    submitButton.classList.remove('hidden');
+    nameInput.value = authUser.name;
+    nameInput.readOnly = true;
+    nameInput.required = false;
+    return;
+  }
+
+  accountStatus.classList.add('hidden');
+  loginButton.classList.remove('hidden');
+  guestButton.classList.remove('hidden');
+  guestFields.classList.add('hidden');
+  submitButton.classList.add('hidden');
+  nameInput.value = '';
+  nameInput.readOnly = false;
+  nameInput.required = false;
+}
+
 async function bootstrapAuth() {
-  if (/^\/join\//.test(window.location.pathname)) return;
   try {
     const result = await requestApi('/api/auth/me');
     authUser = result.user;
     const profileName = $('.profile-copy strong');
     if (profileName) profileName.textContent = authUser.name;
-    await loadOwnedEvents();
+    if (/^\/join\//.test(window.location.pathname)) {
+      updateJoinAuthenticationUi();
+    } else {
+      await loadOwnedEvents();
+    }
   } catch (error) {
     if (error.status === 401) {
-      setAuthMode('login');
-      openDialog('#auth-modal');
+      if (!/^\/join\//.test(window.location.pathname)) {
+        setAuthMode('login');
+        openDialog('#auth-modal');
+      }
     } else {
       showToast(error.message);
     }
@@ -955,9 +992,7 @@ $('#auth-form').addEventListener('submit', async event => {
     if (profileName) profileName.textContent = authUser.name;
     $('#auth-modal').close();
     if (activeInviteToken) {
-      $('#join-name').value = authUser.name;
-      $('#join-name').readOnly = true;
-      $('#join-login-button').classList.add('hidden');
+      updateJoinAuthenticationUi();
       openDialog('#join-modal');
       showToast(`Sesión iniciada como ${authUser.name}.`);
     } else {
@@ -975,6 +1010,14 @@ $('#join-login-button').addEventListener('click', () => {
   $('#join-modal').close();
   setAuthMode('login');
   openDialog('#auth-modal');
+});
+
+$('#join-guest-button').addEventListener('click', () => {
+  $('#join-guest-fields').classList.remove('hidden');
+  $('#join-submit').classList.remove('hidden');
+  $('#join-name').required = true;
+  $('#join-guest-button').classList.add('hidden');
+  $('#join-name').focus();
 });
 
 $('#logout-button').addEventListener('click', async () => {
@@ -1426,6 +1469,7 @@ async function loadInvitationFromLink() {
     persistAppState();
     $('#join-event-name').textContent = remoteEvent.name;
     $('#join-event-details').textContent = `${formatDateLong(remoteEvent.date)} · ${remoteEvent.time || '14:00'} · ${remoteEvent.location}`;
+    updateJoinAuthenticationUi();
     $('#join-feedback').textContent = '';
   } catch (error) {
     console.error('Unable to load the event invitation.', error);
