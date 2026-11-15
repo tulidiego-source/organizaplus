@@ -217,6 +217,19 @@
     </form>
   </dialog>
 
+  <dialog class="app-modal delete-confirm-modal" id="attendee-delete-confirm-modal">
+    <form method="dialog" class="modal-form" id="attendee-delete-confirm-form">
+      <button class="modal-close" type="button" aria-label="Cerrar">×</button>
+      <span class="section-eyebrow">ELIMINAR ASISTENTE</span>
+      <h2>¿Quieres eliminar a esta persona?</h2>
+      <p id="attendee-delete-confirm-copy">Dejará de aparecer en el evento y ya no contará para el recuento de asistentes.</p>
+      <div class="modal-actions">
+        <button class="secondary-button" id="cancel-attendee-delete" type="button">Cancelar</button>
+        <button class="danger-button" id="confirm-attendee-delete" type="button">Eliminar asistente</button>
+      </div>
+    </form>
+  </dialog>
+
   <dialog class="app-modal" id="task-modal">
     <form method="dialog" class="modal-form" id="task-form">
       <button class="modal-close" type="button" aria-label="Cerrar">×</button>

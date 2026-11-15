@@ -87,6 +87,7 @@ let remoteStateSyncInProgress = false;
 let remoteStateSyncQueued = false;
 let authUser = null;
 let authMode = 'login';
+let attendeeToDeleteIndex = null;
 
 async function requestApi(route, options = {}) {
   let response;
@@ -626,13 +627,51 @@ function renderAttendees() {
   $('#attendee-strip').innerHTML = attendees.slice(0, 6).map(person =>
     `<div class="person-chip"><span class="avatar" style="background:${person.color}">${person.initial}</span><span>${escapeHtml(person.name.split(' ')[0])}</span></div>`
   ).join('');
-  $('#attendee-list').innerHTML = attendees.map(person => `
+  $('#attendee-list').innerHTML = attendees.map((person, index) => `
     <div class="attendee-list-row">
       <span class="avatar" style="background:${person.color}">${person.initial}</span>
       <span class="attendee-list-name"><strong>${escapeHtml(person.name)}</strong><small>${escapeHtml(person.role)}</small></span>
       <span class="attendance-status ${person.status === 'Pendiente' ? 'pending' : ''}">${person.status === 'Pendiente' ? 'Por confirmar' : person.status}</span>
+      ${index > 0 ? `<button class="attendee-delete-button" type="button" data-delete-attendee="${index}" aria-label="Eliminar a ${escapeHtml(person.name)}">×</button>` : ''}
     </div>`).join('');
   populatePeopleOptions();
+}
+
+function openAttendeeDeleteConfirmation(index) {
+  const person = attendees[index];
+  if (!person || index === 0) return;
+  attendeeToDeleteIndex = index;
+  $('#attendee-delete-confirm-copy').textContent = `Se eliminará a «${person.name}» aunque su asistencia esté ${person.status === 'Pendiente' ? 'pendiente' : 'confirmada'}.`;
+  openDialog('#attendee-delete-confirm-modal');
+}
+
+async function deleteSelectedAttendee() {
+  const index = attendeeToDeleteIndex;
+  const person = attendees[index];
+  if (!person) return;
+  const button = $('#confirm-attendee-delete');
+  button.disabled = true;
+  try {
+    let remoteAttendees = null;
+    if (currentEvent.inviteToken && currentEvent.ownerToken && person.id) {
+      const invitation = await requestApi(`/api/invitations/${encodeURIComponent(currentEvent.inviteToken)}/attendees/${encodeURIComponent(person.id)}`, {
+        method: 'DELETE',
+        headers: { 'X-Organizer-Token': currentEvent.ownerToken }
+      });
+      remoteAttendees = invitation.attendees;
+    }
+    attendees = remoteAttendees || attendees.filter((_, attendeeIndex) => attendeeIndex !== index);
+    renderAll();
+    persistAppState();
+    $('#attendee-delete-confirm-modal').close();
+    attendeeToDeleteIndex = null;
+    showToast('Asistente eliminado.');
+  } catch (error) {
+    console.error('Unable to delete attendee.', error);
+    showToast(error.message);
+  } finally {
+    button.disabled = false;
+  }
 }
 
 function renderExpenses() {
@@ -887,6 +926,16 @@ $('#delete-event-button').addEventListener('click', openEventActions);
 $('#open-delete-confirm').addEventListener('click', openDeleteConfirmation);
 $('#cancel-delete').addEventListener('click', () => $('#delete-confirm-modal').close());
 $('#confirm-delete').addEventListener('click', deleteCurrentEvent);
+$('#attendee-list').addEventListener('click', event => {
+  const button = event.target.closest('[data-delete-attendee]');
+  if (!button) return;
+  openAttendeeDeleteConfirmation(Number(button.dataset.deleteAttendee));
+});
+$('#cancel-attendee-delete').addEventListener('click', () => {
+  attendeeToDeleteIndex = null;
+  $('#attendee-delete-confirm-modal').close();
+});
+$('#confirm-attendee-delete').addEventListener('click', deleteSelectedAttendee);
 $$('.modal-close').forEach(button => button.addEventListener('click', () => button.closest('dialog').close()));
 
 $('#auth-toggle').addEventListener('click', () => setAuthMode(authMode === 'login' ? 'register' : 'login'));

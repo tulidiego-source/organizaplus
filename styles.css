@@ -209,6 +209,8 @@ h1 { margin-bottom: 6px; color: #263a30; font-size: clamp(24px, 2.4vw, 31px); fo
 .attendee-list-name small { color: #9aa39c; font-size: 9px; }
 .attendance-status { margin-left: auto; padding: 5px 8px; border-radius: 10px; background: #eaf4eb; color: #54845b; font-size: 9px; font-weight: 600; }
 .attendance-status.pending { background: #fff3e7; color: #bf7c42; }
+.attendee-delete-button { display: grid; flex: 0 0 auto; place-items: center; width: 24px; height: 24px; margin-left: 2px; border: 1px solid #f0d8d0; border-radius: 50%; background: #fff7f4; color: #b85f4f; font-size: 16px; line-height: 1; }
+.attendee-delete-button:hover { border-color: #e7b8aa; background: #fff0eb; }
 .task-board { padding: 3px 17px; }
 .task-board .task-row { padding: 13px 2px; }
 .task-board .task-main strong { font-size: 11px; }

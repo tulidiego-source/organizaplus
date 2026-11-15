@@ -177,6 +177,35 @@ test('shared tasks, votes and expenses survive an invitation state update', asyn
   }
 });
 
+test('the organizer can remove a confirmed or pending attendee with authorization', async () => {
+  const context = await startTestServer();
+  try {
+    const payload = invitationPayload(4);
+    payload.attendees.push({ name: 'Pendiente', role: 'Participante', status: 'Pendiente', color: '#d9c2cf' });
+    const created = await requestJson(context.baseUrl, '/api/events', 'POST', payload);
+    const token = created.body.inviteToken;
+    const joined = await requestJson(context.baseUrl, `/api/invitations/${token}/join`, 'POST', { name: 'Confirmada' });
+    assert.equal(joined.status, 200);
+    const invitation = await requestJson(context.baseUrl, `/api/invitations/${token}`, 'GET');
+    const pendingId = invitation.body.attendees.find(person => person.status === 'Pendiente').id;
+    const confirmedId = invitation.body.attendees.find(person => person.name === 'Confirmada').id;
+
+    const deletedPending = await requestJson(context.baseUrl, `/api/invitations/${token}/attendees/${pendingId}`, 'DELETE', undefined, {
+      'X-Organizer-Token': created.body.ownerToken
+    });
+    assert.equal(deletedPending.status, 200);
+    assert.equal(deletedPending.body.attendees.some(person => person.id === pendingId), false);
+
+    const deletedConfirmed = await requestJson(context.baseUrl, `/api/invitations/${token}/attendees/${confirmedId}`, 'DELETE', undefined, {
+      'X-Organizer-Token': created.body.ownerToken
+    });
+    assert.equal(deletedConfirmed.status, 200);
+    assert.equal(deletedConfirmed.body.attendees.some(person => person.id === confirmedId), false);
+  } finally {
+    await context.cleanup();
+  }
+});
+
 test('the organizer can delete an invitation but an unauthorized request cannot', async () => {
   const context = await startTestServer();
   try {

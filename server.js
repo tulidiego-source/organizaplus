@@ -626,6 +626,24 @@ function createAppServer(options = {}) {
       return;
     }
 
+    const attendeeDeleteMatch = url.pathname.match(/^\/api\/invitations\/([A-Za-z0-9_-]{32})\/attendees\/([A-Za-z0-9_-]+)$/);
+    if (request.method === 'DELETE' && attendeeDeleteMatch) {
+      const result = await mutateStore(() => {
+        const record = records.find(item => item.token === attendeeDeleteMatch[1]);
+        if (!record) throw new HttpError(404, 'La invitación no existe o ha caducado.');
+        if (!record.ownerToken || request.headers['x-organizer-token'] !== record.ownerToken) {
+          throw new HttpError(403, 'No tienes permiso para modificar este evento.');
+        }
+        const index = record.attendees.findIndex(person => person.id === attendeeDeleteMatch[2]);
+        if (index < 0) throw new HttpError(404, 'El asistente ya no está en este evento.');
+        if (index === 0) throw new HttpError(400, 'El organizador no se puede eliminar del evento.');
+        record.attendees.splice(index, 1);
+        return publicInvitation(record);
+      });
+      sendJson(response, 200, result);
+      return;
+    }
+
     const stateMatch = url.pathname.match(/^\/api\/invitations\/([A-Za-z0-9_-]{32})\/state$/);
     if (request.method === 'PATCH' && stateMatch) {
       const body = await readJsonBody(request);
