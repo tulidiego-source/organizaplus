@@ -66,6 +66,10 @@ let expenses = [
 ];
 
 const colors = ['#d6c6a9', '#c4d6c0', '#d9c2cf', '#e7d5a9', '#b8d2d1', '#e5c4ba'];
+const eventImageCount = 9;
+const avatarImageCount = 12;
+let wizardImageIndex = 0;
+let selectedAvatarIndex = 0;
 let dateOptions = [
   { date: '2026-11-21', time: '14:00', votes: 8 },
   { date: '2026-11-22', time: '14:00', votes: 5 },
@@ -170,6 +174,39 @@ eventTemplates.forEach((event, index) => {
 const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => Array.from(root.querySelectorAll(selector));
 const euro = value => `${value.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €`;
+
+function spriteStyle(image, index, columns, rows) {
+  const x = columns === 1 ? 0 : (index % columns) * (100 / (columns - 1));
+  const y = rows === 1 ? 0 : Math.floor(index / columns) * (100 / (rows - 1));
+  return `background-image:url('${image}');background-size:${columns * 100}% ${rows * 100}%;background-position:${x}% ${y}%;`;
+}
+
+function renderEventImagePicker() {
+  const picker = $('#event-image-picker');
+  if (!picker) return;
+  picker.innerHTML = Array.from({ length: eventImageCount }, (_, index) => `
+    <button type="button" class="image-choice ${index === wizardImageIndex ? 'selected' : ''}" data-event-image="${index}" style="${spriteStyle('eventos.png', index, 3, 3)}" aria-label="Imagen de evento ${index + 1}"></button>
+  `).join('');
+}
+
+function renderAvatarPicker() {
+  const picker = $('#avatar-picker');
+  if (!picker) return;
+  picker.innerHTML = Array.from({ length: avatarImageCount }, (_, index) => `
+    <button type="button" class="image-choice ${index === selectedAvatarIndex ? 'selected' : ''}" data-avatar-index="${index}" style="${spriteStyle('avatars.png', index, 4, 3)}" aria-label="Avatar ${index + 1}"></button>
+  `).join('');
+}
+
+function attendeePeopleCount(person) {
+  return (person.adults || 1) + (person.children || 0);
+}
+
+function attendeePartyLabel(person) {
+  const adults = person.adults || 1;
+  const children = person.children || 0;
+  const adultLabel = `${adults} ${adults === 1 ? 'adulto' : 'adultos'}`;
+  return children ? `${adultLabel} · ${children} ${children === 1 ? 'niño' : 'niños'}` : adultLabel;
+}
 
 function showToast(message) {
   const toast = $('#toast');
@@ -383,14 +420,39 @@ function setAuthMode(mode) {
   $('#auth-feedback').textContent = '';
 }
 
+function updateProfileUi() {
+  if (!authUser) return;
+  const profileName = $('.profile-copy strong');
+  const profileRole = $('.profile-copy small');
+  const profileAvatar = $('.profile-button .avatar');
+  if (profileName) profileName.textContent = authUser.name;
+  if (profileRole) profileRole.textContent = authUser.email || 'Organizador';
+  if (profileAvatar) {
+    const avatarIndex = Number.isInteger(Number(authUser.avatar)) ? Number(authUser.avatar) : 0;
+    profileAvatar.style = spriteStyle('avatars.png', avatarIndex, 4, 3);
+    profileAvatar.textContent = '';
+  }
+}
+
+function openProfile() {
+  if (!authUser) return;
+  $('#profile-name').value = authUser.name;
+  $('#profile-password').value = '';
+  selectedAvatarIndex = Number.isInteger(Number(authUser.avatar)) ? Number(authUser.avatar) : 0;
+  $('#profile-feedback').textContent = '';
+  renderAvatarPicker();
+  openDialog('#profile-modal');
+}
+
 function updateJoinAuthenticationUi() {
   const accountStatus = $('#join-account-status');
   const loginButton = $('#join-login-button');
   const guestButton = $('#join-guest-button');
   const guestFields = $('#join-guest-fields');
+  const partyFields = $('#join-party-fields');
   const nameInput = $('#join-name');
   const submitButton = $('#join-submit');
-  if (!accountStatus || !loginButton || !guestButton || !guestFields || !nameInput) return;
+  if (!accountStatus || !loginButton || !guestButton || !guestFields || !partyFields || !nameInput) return;
 
   if (authUser) {
     accountStatus.textContent = `Entrarás como ${authUser.name}.`;
@@ -398,6 +460,7 @@ function updateJoinAuthenticationUi() {
     loginButton.classList.add('hidden');
     guestButton.classList.add('hidden');
     guestFields.classList.add('hidden');
+    partyFields.classList.remove('hidden');
     submitButton.classList.remove('hidden');
     nameInput.value = authUser.name;
     nameInput.readOnly = true;
@@ -410,6 +473,7 @@ function updateJoinAuthenticationUi() {
   loginButton.classList.remove('hidden');
   guestButton.classList.remove('hidden');
   guestFields.classList.add('hidden');
+  partyFields.classList.add('hidden');
   submitButton.classList.add('hidden');
   nameInput.value = '';
   nameInput.readOnly = false;
@@ -435,8 +499,7 @@ async function bootstrapAuth() {
   try {
     const result = await requestApi('/api/auth/me');
     authUser = result.user;
-    const profileName = $('.profile-copy strong');
-    if (profileName) profileName.textContent = authUser.name;
+    updateProfileUi();
     if (/^\/join\//.test(window.location.pathname)) {
       updateJoinAuthenticationUi();
     } else {
@@ -662,8 +725,9 @@ function renderTasks() {
 }
 
 function renderAttendees() {
-  const confirmed = attendees.filter(person => person.status !== 'Pendiente').length;
-  const pending = attendees.length - confirmed;
+  const confirmedPeople = attendees.filter(person => person.status !== 'Pendiente');
+  const confirmed = confirmedPeople.reduce((total, person) => total + attendeePeopleCount(person), 0);
+  const pending = attendees.filter(person => person.status === 'Pendiente').length;
   $('#hero-attendee-count').textContent = confirmed;
   $('#hero-attendee-label').textContent = confirmed === 1 ? 'confirmado' : 'confirmados';
   $('#status-attendee-count').textContent = confirmed;
@@ -674,7 +738,6 @@ function renderAttendees() {
   $('#pending-label').textContent = pending === 1 ? 'pendiente' : 'pendientes';
   $('#status-pending-count').textContent = pending;
   $('#split-count').textContent = confirmed;
-  const confirmedPeople = attendees.filter(person => person.status !== 'Pendiente');
   $('#avatar-stack').innerHTML = confirmedPeople.slice(0, 4).map(person =>
     `<span class="avatar" style="background:${person.color}">${escapeHtml(person.initial)}</span>`
   ).join('') + (confirmedPeople.length > 4 ? `<span class="avatar avatar-extra">+${confirmedPeople.length - 4}</span>` : '');
@@ -689,7 +752,7 @@ function renderAttendees() {
   $('#attendee-list').innerHTML = attendees.map((person, index) => `
     <div class="attendee-list-row">
       <span class="avatar" style="background:${person.color}">${person.initial}</span>
-      <span class="attendee-list-name"><strong>${escapeHtml(person.name)}</strong><small>${escapeHtml(person.role)}</small></span>
+      <span class="attendee-list-name"><strong>${escapeHtml(person.name)}</strong><small>${escapeHtml(person.role)} · ${escapeHtml(attendeePartyLabel(person))}</small></span>
       <span class="attendance-status ${person.status === 'Pendiente' ? 'pending' : ''}">${person.status === 'Pendiente' ? 'Por confirmar' : person.status}</span>
       ${index > 0 ? `<button class="attendee-delete-button" type="button" data-delete-attendee="${index}" aria-label="Eliminar a ${escapeHtml(person.name)}">×</button>` : ''}
     </div>`).join('');
@@ -735,7 +798,8 @@ async function deleteSelectedAttendee() {
 
 function renderExpenses() {
   const total = expenses.reduce((sum, expense) => sum + expense.amount, 0);
-  const confirmed = attendees.filter(person => person.status !== 'Pendiente').length;
+  const confirmed = attendees.filter(person => person.status !== 'Pendiente')
+    .reduce((totalPeople, person) => totalPeople + attendeePeopleCount(person), 0);
   const share = confirmed ? total / confirmed : 0;
   $('#total-expenses').textContent = euro(total);
   $('#expense-total-large').textContent = euro(total);
@@ -802,6 +866,7 @@ function renderEventGallery() {
   if (eventCount) eventCount.textContent = eventTemplates[0]?.id === 'empty-workspace' ? '0' : String(eventTemplates.length);
   gallery.innerHTML = eventTemplates.map(event => `
     <button class="event-gallery-card ${event.id === currentEvent.id ? 'active' : ''}" data-event-id="${event.id}" type="button">
+      <span class="event-card-image" style="${spriteStyle('eventos.png', Number.isInteger(event.imageIndex) ? event.imageIndex : 0, 3, 3)}" aria-hidden="true"></span>
       <span class="tag">${escapeHtml(event.badge)}</span>
       <h3>${escapeHtml(event.name)}</h3>
       <p>${escapeHtml(event.description)}</p>
@@ -840,6 +905,14 @@ function renderCurrentEvent() {
   if (heroKicker) heroKicker.innerHTML = `<span class="kicker-dot"></span> ${escapeHtml(currentEvent.badge.toUpperCase())} <span class="kicker-separator">·</span> ${escapeHtml(currentEvent.type.toUpperCase())}`;
   const heroDescription = document.querySelector('.hero-description');
   if (heroDescription) heroDescription.textContent = currentEvent.description;
+  const heroImage = document.querySelector('.hero-image');
+  if (heroImage) {
+    const imageIndex = Number.isInteger(currentEvent.imageIndex) ? currentEvent.imageIndex : 0;
+    heroImage.style.backgroundImage = "url('eventos.png')";
+    heroImage.style.backgroundSize = '300% 300%';
+    heroImage.style.backgroundPosition = `${(imageIndex % 3) * 50}% ${Math.floor(imageIndex / 3) * 50}%`;
+    heroImage.classList.add('event-image-selected');
+  }
   const meta = document.querySelectorAll('.meta-item strong');
   if (meta.length > 0) {
     const dateText = new Intl.DateTimeFormat('es-ES', { weekday: 'long', day: 'numeric', month: 'long' }).format(new Date(currentEvent.date + 'T12:00:00'));
@@ -1036,13 +1109,46 @@ $('#join-login-button').addEventListener('click', () => {
 
 $('#join-guest-button').addEventListener('click', () => {
   $('#join-guest-fields').classList.remove('hidden');
+  $('#join-party-fields').classList.remove('hidden');
   $('#join-submit').classList.remove('hidden');
   $('#join-name').required = true;
   $('#join-guest-button').classList.add('hidden');
   $('#join-name').focus();
 });
 
+$('#profile-button').addEventListener('click', openProfile);
+
+$('#avatar-picker').addEventListener('click', event => {
+  const choice = event.target.closest('[data-avatar-index]');
+  if (!choice) return;
+  selectedAvatarIndex = Number(choice.dataset.avatarIndex);
+  renderAvatarPicker();
+});
+
+$('#profile-form').addEventListener('submit', async event => {
+  event.preventDefault();
+  const form = new FormData(event.currentTarget);
+  const submitButton = $('#profile-submit');
+  submitButton.disabled = true;
+  $('#profile-feedback').textContent = 'Guardando cambios…';
+  try {
+    const result = await requestApi('/api/auth/profile', {
+      method: 'PATCH',
+      body: JSON.stringify({ name: form.get('name'), password: form.get('password'), avatar: String(selectedAvatarIndex) })
+    });
+    authUser = result.user;
+    updateProfileUi();
+    $('#profile-modal').close();
+    showToast('Perfil actualizado.');
+  } catch (error) {
+    $('#profile-feedback').textContent = error.message;
+  } finally {
+    submitButton.disabled = false;
+  }
+});
+
 $('#logout-button').addEventListener('click', async () => {
+  $('#profile-modal').close();
   try {
     await requestApi('/api/auth/logout', { method: 'POST', body: JSON.stringify({}) });
   } catch (error) {
@@ -1064,6 +1170,8 @@ function localDateAfter(days) {
 function startEventWizard() {
   $('#event-form').reset();
   wizardStep = 0;
+  wizardImageIndex = 0;
+  renderEventImagePicker();
   wizardInvitees = [];
   wizardDates = [
     { date: localDateAfter(7), time: '14:00' },
@@ -1189,6 +1297,12 @@ function addWizardInvites() {
 }
 
 $('#add-wizard-invite').addEventListener('click', addWizardInvites);
+$('#event-image-picker').addEventListener('click', event => {
+  const choice = event.target.closest('[data-event-image]');
+  if (!choice) return;
+  wizardImageIndex = Number(choice.dataset.eventImage);
+  renderEventImagePicker();
+});
 $('#invite-emails').addEventListener('keydown', event => {
   if (event.key === 'Enter') {
     event.preventDefault();
@@ -1302,7 +1416,7 @@ async function completeEventWizard() {
   const description = String(form.get('description') || '').trim();
   const location = String(form.get('location') || '').trim();
   const organizerName = authUser?.name || 'Diego Navarro';
-  const organizer = { name: organizerName, initial: initials(organizerName), role: 'Organizador', status: 'Confirmado', color: '#e9c3aa' };
+  const organizer = { name: organizerName, initial: initials(organizerName), role: 'Organizador', status: 'Confirmado', adults: 1, children: 0, color: '#e9c3aa' };
   const invitees = wizardInvitees.map((email, index) => {
     const localName = email.split('@')[0].replace(/[._-]+/g, ' ').trim();
     const inviteeName = localName.replace(/\b\w/g, character => character.toUpperCase()) || email;
@@ -1312,6 +1426,8 @@ async function completeEventWizard() {
       initial: initials(inviteeName),
       role: 'Invitación enviada',
       status: 'Pendiente',
+      adults: 1,
+      children: 0,
       color: colors[index % colors.length]
     };
   });
@@ -1326,6 +1442,7 @@ async function completeEventWizard() {
     badge: 'Nuevo evento',
     capacity,
     allowGuests: form.get('allowGuests') === 'on',
+    imageIndex: wizardImageIndex,
     invitees: wizardInvitees.slice()
   };
   saveCurrentEventData();
@@ -1512,12 +1629,14 @@ $('#join-form').addEventListener('submit', async event => {
     return;
   }
   const submitButton = $('#join-submit');
+  const additionalAdults = Math.max(0, Number($('#join-adults').value) || 0);
+  const children = Math.max(0, Number($('#join-children').value) || 0);
   submitButton.disabled = true;
   $('#join-feedback').textContent = 'Guardando tu confirmación…';
   try {
     const result = await requestApi(`/api/invitations/${encodeURIComponent(activeInviteToken)}/join`, {
       method: 'POST',
-      body: JSON.stringify({ name })
+      body: JSON.stringify({ name, adults: additionalAdults, children })
     });
     attendees = result.attendees;
     joinedInvitationNames[activeInviteToken] = name;

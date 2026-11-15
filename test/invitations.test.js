@@ -155,6 +155,24 @@ test('the invitation prevents duplicate names and enforces the event capacity', 
   }
 });
 
+test('an attendee can confirm additional adults and children', async () => {
+  const context = await startTestServer();
+  try {
+    const created = await requestJson(context.baseUrl, '/api/events', 'POST', invitationPayload(10));
+    const result = await requestJson(context.baseUrl, `/api/invitations/${created.body.inviteToken}/join`, 'POST', {
+      name: 'Pepe',
+      adults: 2,
+      children: 3
+    });
+    assert.equal(result.status, 200);
+    const pepe = result.body.attendees.find(person => person.name === 'Pepe');
+    assert.equal(pepe.adults, 3);
+    assert.equal(pepe.children, 3);
+  } finally {
+    await context.cleanup();
+  }
+});
+
 test('shared tasks, votes and expenses survive an invitation state update', async () => {
   const context = await startTestServer();
   try {

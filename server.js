@@ -22,7 +22,9 @@ const allowedStaticFiles = new Map([
   ['/', ['index.html', 'text/html; charset=utf-8']],
   ['/index.html', ['index.html', 'text/html; charset=utf-8']],
   ['/app.js', ['app.js', 'text/javascript; charset=utf-8']],
-  ['/styles.css', ['styles.css', 'text/css; charset=utf-8']]
+  ['/styles.css', ['styles.css', 'text/css; charset=utf-8']],
+  ['/eventos.png', ['eventos.png', 'image/png']],
+  ['/avatars.png', ['avatars.png', 'image/png']]
 ]);
 
 class HttpError extends Error {
@@ -69,6 +71,8 @@ function normalizeAttendees(input) {
     if (!allowedStatuses.includes(person.status)) throw new HttpError(400, 'El estado de asistencia no es válido.');
     const status = person.status;
     const role = typeof person.role === 'string' ? cleanText(person.role, 'El rol', 40, false) : 'Participante';
+    const adults = Number.isInteger(person.adults) && person.adults >= 1 && person.adults <= 50 ? person.adults : 1;
+    const children = Number.isInteger(person.children) && person.children >= 0 && person.children <= 50 ? person.children : 0;
     const initial = Array.from(name)[0].toLocaleUpperCase('es-ES');
     const color = /^#[\da-f]{6}$/i.test(person.color || '') ? person.color : '#c4d6c0';
     return {
@@ -76,11 +80,17 @@ function normalizeAttendees(input) {
       initial,
       role: role || 'Participante',
       status,
+      adults,
+      children,
       color,
       ...(typeof person.email === 'string' ? { email: person.email.slice(0, 254).trim().toLowerCase() } : {}),
       id: typeof person.id === 'string' ? person.id : `initial-${index}`
     };
   });
+}
+
+function attendeeHeadcount(attendees) {
+  return attendees.reduce((total, person) => total + (person.adults || 1) + (person.children || 0), 0);
 }
 
 function normalizeTasks(input) {
@@ -256,7 +266,7 @@ function createEventRecord(body, ownerUserId = null) {
     throw new HttpError(400, 'El aforo debe estar entre 2 y 200 personas.');
   }
   const attendees = normalizeAttendees(body.attendees);
-  if (!attendees.length || attendees.length > capacity) {
+  if (!attendees.length || attendeeHeadcount(attendees) > capacity) {
     throw new HttpError(400, 'El número inicial de asistentes supera el aforo.');
   }
   const time = source.time === undefined ? '14:00' : source.time;
@@ -271,7 +281,8 @@ function createEventRecord(body, ownerUserId = null) {
     description: cleanText(source.description || '', 'La descripción', 160, false),
     badge: cleanText(source.badge || 'Evento privado', 'La etiqueta', 40, false) || 'Evento privado',
     capacity,
-    allowGuests: source.allowGuests === true
+    allowGuests: source.allowGuests === true,
+    imageIndex: Number.isInteger(source.imageIndex) && source.imageIndex >= 0 && source.imageIndex < 9 ? source.imageIndex : 0
   };
   return {
     id: crypto.randomBytes(16).toString('hex'),
@@ -315,7 +326,7 @@ function createAppServer(options = {}) {
     const rawToken = parseCookies(request).organizat_session;
     if (!rawToken) return null;
     const result = await pool.query(`
-      SELECT o.id, o.email, o.name
+      SELECT o.id, o.email, o.name, o.avatar
       FROM organizer_sessions s
       JOIN organizers o ON o.id = s.user_id
       WHERE s.token_hash = $1 AND s.expires_at > NOW()
@@ -368,9 +379,11 @@ function createAppServer(options = {}) {
           email TEXT NOT NULL UNIQUE,
           name TEXT NOT NULL,
           password_hash TEXT NOT NULL,
+          avatar TEXT NOT NULL DEFAULT '0',
           created_at TIMESTAMPTZ NOT NULL
         )
       `);
+      await pool.query("ALTER TABLE organizers ADD COLUMN IF NOT EXISTS avatar TEXT NOT NULL DEFAULT '0'");
       await pool.query(`
         CREATE TABLE IF NOT EXISTS organizer_sessions (
           token_hash TEXT PRIMARY KEY,
@@ -522,15 +535,15 @@ function createAppServer(options = {}) {
       const userId = crypto.randomUUID();
       try {
         await pool.query(
-          'INSERT INTO organizers (id, email, name, password_hash, created_at) VALUES ($1, $2, $3, $4, NOW())',
-          [userId, email, name, passwordHash]
+          'INSERT INTO organizers (id, email, name, password_hash, avatar, created_at) VALUES ($1, $2, $3, $4, $5, NOW())',
+          [userId, email, name, passwordHash, '0']
         );
       } catch (error) {
         if (error.code === '23505') throw new HttpError(409, 'Ya existe una cuenta con ese correo.');
         throw error;
       }
       const token = await createSession(userId);
-      sendJson(response, 201, { user: { id: userId, email, name } }, { 'Set-Cookie': sessionCookie(token) });
+      sendJson(response, 201, { user: { id: userId, email, name, avatar: '0' } }, { 'Set-Cookie': sessionCookie(token) });
       return;
     }
 
@@ -539,13 +552,31 @@ function createAppServer(options = {}) {
       const body = await readJsonBody(request);
       const email = normalizeEmail(body && body.email);
       const password = validatePassword(body && body.password);
-      const result = await pool.query('SELECT id, email, name, password_hash FROM organizers WHERE email = $1', [email]);
+      const result = await pool.query('SELECT id, email, name, avatar, password_hash FROM organizers WHERE email = $1', [email]);
       const user = result.rows[0];
       if (!user || !(await verifyPassword(password, user.password_hash))) {
         throw new HttpError(401, 'El correo o la contraseña no son correctos.');
       }
       const token = await createSession(user.id);
-      sendJson(response, 200, { user: { id: user.id, email: user.email, name: user.name } }, { 'Set-Cookie': sessionCookie(token) });
+      sendJson(response, 200, { user: { id: user.id, email: user.email, name: user.name, avatar: user.avatar || '0' } }, { 'Set-Cookie': sessionCookie(token) });
+      return;
+    }
+
+    if (request.method === 'PATCH' && url.pathname === '/api/auth/profile') {
+      if (!pool) throw new HttpError(503, 'La edición del perfil necesita DATABASE_URL configurado.');
+      const user = await getAuthenticatedUser(request);
+      if (!user) throw new HttpError(401, 'No hay una sesión iniciada.');
+      const body = await readJsonBody(request);
+      const name = body && body.name !== undefined ? cleanText(body.name, 'El nombre', 60) : user.name;
+      const avatar = body && body.avatar !== undefined ? String(body.avatar) : (user.avatar || '0');
+      if (!/^([0-9]|1[01])$/.test(avatar)) throw new HttpError(400, 'El avatar seleccionado no es válido.');
+      const password = body && body.password ? validatePassword(body.password) : null;
+      const passwordHash = password ? await hashPassword(password) : null;
+      const result = await pool.query(
+        'UPDATE organizers SET name = $1, avatar = $2, password_hash = COALESCE($3, password_hash) WHERE id = $4 RETURNING id, email, name, avatar',
+        [name, avatar, passwordHash, user.id]
+      );
+      sendJson(response, 200, { user: result.rows[0] });
       return;
     }
 
@@ -678,12 +709,23 @@ function createAppServer(options = {}) {
         if (existing && existing.status !== 'Pendiente') {
           throw new HttpError(409, 'Ya hay una persona confirmada con ese nombre. Añade tu apellido para distinguirte.');
         }
-        if (!existing && record.attendees.length >= record.event.capacity) {
+        const additionalAdults = body && body.adults === undefined ? 0 : Number(body && body.adults);
+        const children = body && body.children === undefined ? 0 : Number(body && body.children);
+        if (!Number.isInteger(additionalAdults) || additionalAdults < 0 || additionalAdults > 50 || !Number.isInteger(children) || children < 0 || children > 50) {
+          throw new HttpError(400, 'El número de acompañantes no es válido.');
+        }
+        const partyAdults = 1 + additionalAdults;
+        const partySize = partyAdults + children;
+        const currentHeadcount = attendeeHeadcount(record.attendees);
+        const existingHeadcount = existing ? (existing.adults || 1) + (existing.children || 0) : 0;
+        if (currentHeadcount - existingHeadcount + partySize > record.event.capacity) {
           throw new HttpError(409, 'El evento ha alcanzado el aforo máximo.');
         }
         if (existing) {
           existing.status = 'Confirmado';
           existing.role = 'Participante';
+          existing.adults = partyAdults;
+          existing.children = children;
         } else {
           record.attendees.push({
             id: crypto.randomUUID(),
@@ -691,6 +733,8 @@ function createAppServer(options = {}) {
             initial: Array.from(name)[0].toLocaleUpperCase('es-ES'),
             role: 'Participante',
             status: 'Confirmado',
+            adults: partyAdults,
+            children,
             color: '#c4d6c0'
           });
         }

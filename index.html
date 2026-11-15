@@ -37,7 +37,7 @@
           <p>Organizarlo juntos es más fácil.</p>
           <button class="text-button" data-tab="tasks">Ver cómo funciona <span>→</span></button>
         </div>
-        <button class="profile-button" id="logout-button" title="Cerrar sesión">
+        <button class="profile-button" id="profile-button" title="Editar perfil">
           <span class="avatar avatar-me">D</span>
           <span class="profile-copy"><strong>Diego Navarro</strong><small>Organizador</small></span>
           <span class="profile-more">···</span>
@@ -195,6 +195,26 @@
     </form>
   </dialog>
 
+  <dialog class="app-modal profile-modal" id="profile-modal">
+    <form method="dialog" class="modal-form" id="profile-form">
+      <button class="modal-close" type="button" aria-label="Cerrar">×</button>
+      <span class="section-eyebrow">TU PERFIL</span>
+      <h2>Personaliza tu cuenta</h2>
+      <p>Tu nombre y avatar aparecerán al organizar eventos.</p>
+      <label for="profile-name">Nombre</label>
+      <input id="profile-name" name="name" maxlength="60" required>
+      <label>Elige tu avatar</label>
+      <div class="image-picker avatar-picker" id="avatar-picker" aria-label="Selecciona tu avatar"></div>
+      <label for="profile-password">Nueva contraseña <span class="optional-label">Opcional</span></label>
+      <input id="profile-password" name="password" type="password" minlength="8" autocomplete="new-password" placeholder="Déjala vacía para mantenerla">
+      <p class="profile-feedback" id="profile-feedback" role="status" aria-live="polite"></p>
+      <div class="modal-actions profile-actions">
+        <button class="secondary-button" id="logout-button" type="button">Cerrar sesión</button>
+        <button class="primary-button" id="profile-submit" type="submit">Guardar cambios</button>
+      </div>
+    </form>
+  </dialog>
+
   <dialog class="app-modal event-actions-modal" id="event-actions-modal">
     <form method="dialog" class="modal-form">
       <button class="modal-close" type="button" aria-label="Cerrar">×</button>
@@ -271,6 +291,8 @@
           <div><label for="event-type">Tipo de evento</label><select id="event-type" name="type"><option>Barbacoa</option><option>Cumpleaños</option><option>Comida de empresa</option><option>Viaje</option><option>Reunión familiar</option><option>Otro</option></select></div>
           <div><label for="event-guests">Máximo de asistentes</label><input id="event-guests" name="guests" type="number" min="2" max="200" value="20"></div>
         </div>
+        <label>Imagen del evento</label>
+        <div class="image-picker event-image-picker" id="event-image-picker" aria-label="Selecciona una imagen para el evento"></div>
         <label for="event-description">Descripción <span class="optional-label">Opcional</span></label><textarea id="event-description" name="description" rows="2" maxlength="160" placeholder="¿Qué plan tienes en mente?"></textarea>
         <label for="event-location">Lugar o punto de encuentro</label><input id="event-location" name="location" placeholder="Ej. Casa de Juan" required maxlength="80">
         <label class="checkbox-label"><input id="event-allow-guests" name="allowGuests" type="checkbox" checked> Los invitados pueden traer acompañantes</label>
@@ -332,6 +354,14 @@
       <div class="join-guest-fields hidden" id="join-guest-fields">
         <label for="join-name">Tu nombre</label>
         <input id="join-name" name="name" maxlength="60" autocomplete="name" placeholder="Ej. María López">
+      </div>
+      <div class="join-party-fields hidden" id="join-party-fields">
+        <label>Personas que vienen contigo</label>
+        <div class="form-row">
+          <div><label for="join-adults">Adultos adicionales</label><input id="join-adults" type="number" min="0" max="50" value="0"></div>
+          <div><label for="join-children">Niños</label><input id="join-children" type="number" min="0" max="50" value="0"></div>
+        </div>
+        <small class="form-hint">Tú cuentas como el primer adulto.</small>
       </div>
       <p class="join-feedback" id="join-feedback" role="status" aria-live="polite"></p>
       <button class="primary-button modal-submit" id="join-submit" type="submit">Sí, me uno <span>✓</span></button>
