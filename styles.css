@@ -200,6 +200,11 @@ h1 { margin-bottom: 6px; color: #263a30; font-size: clamp(24px, 2.4vw, 31px); fo
 .footer-heart { color: #d58866; }
 
 .hidden { display: none !important; }
+.tutorial-list { display: grid; gap: 14px; margin: 18px 0 22px; padding-left: 24px; color: var(--muted); }
+.tutorial-list li { padding-left: 4px; }
+.tutorial-list strong, .tutorial-list span { display: block; }
+.tutorial-list strong { margin-bottom: 3px; color: var(--ink); font-size: 14px; }
+.tutorial-list span { font-size: 12px; line-height: 1.45; }
 .tab-view { margin-top: 28px; }
 .tab-header { display: flex; align-items: center; justify-content: space-between; gap: 20px; margin-bottom: 18px; }
 .tab-header h2 { margin-top: 6px; font-size: 24px; }

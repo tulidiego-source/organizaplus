@@ -986,6 +986,10 @@ function formatDateLong(dateValue) {
 
 function renderCurrentEvent() {
   const title = $('.breadcrumbs strong');
+  const isEmptyWorkspace = currentEvent.id === 'empty-workspace';
+  $$('.event-only').forEach(element => element.classList.toggle('hidden', isEmptyWorkspace));
+  const emptyCreateButton = $('#empty-create-event-button');
+  if (emptyCreateButton) emptyCreateButton.classList.toggle('hidden', !isEmptyWorkspace);
   if (title) title.textContent = currentEvent.name;
   const heroTitle = document.querySelector('.event-hero h1');
   if (heroTitle) heroTitle.innerHTML = `${escapeHtml(currentEvent.name).replace(/ /g, '&nbsp;')}`;
@@ -995,6 +999,7 @@ function renderCurrentEvent() {
   if (heroDescription) heroDescription.textContent = currentEvent.description;
   const heroImage = document.querySelector('.hero-image');
   if (heroImage) {
+    heroImage.setAttribute('aria-label', isEmptyWorkspace ? 'Ilustración de espacio vacío' : 'Ilustración del evento');
     if (currentEvent.id === 'empty-workspace') {
       heroImage.style.backgroundImage = '';
       heroImage.style.backgroundSize = '';
@@ -1034,6 +1039,8 @@ function setTab(tab) {
   currentTab = validTabs.includes(tab) ? tab : 'overview';
   const hasEvent = currentEvent && currentEvent.id !== 'empty-workspace';
   if (!hasEvent && ['attendees', 'tasks', 'expenses'].includes(currentTab)) currentTab = 'overview';
+  $('.event-label').classList.toggle('hidden', !hasEvent);
+  $('.event-nav').classList.toggle('hidden', !hasEvent);
   const showOverview = currentTab === 'overview';
   const showEventGallery = currentTab === 'overview' || currentTab === 'events';
   $('#event-gallery').classList.toggle('hidden', !showEventGallery);
@@ -1169,6 +1176,12 @@ $('#open-expense-modal').addEventListener('click', () => openDialog('#expense-mo
 $('#invite-button').addEventListener('click', openInviteFlow);
 $('#share-button').addEventListener('click', openInviteFlow);
 $('#create-event-button').addEventListener('click', startEventWizard);
+$('#empty-create-event-button').addEventListener('click', startEventWizard);
+$('#tutorial-button').addEventListener('click', () => openDialog('#tutorial-modal'));
+$('#tutorial-create-event').addEventListener('click', () => {
+  $('#tutorial-modal').close();
+  startEventWizard();
+});
 $('#delete-event-button').addEventListener('click', openEventActions);
 $('#edit-event-button').addEventListener('click', startEventEdit);
 $('#open-delete-confirm').addEventListener('click', openDeleteConfirmation);

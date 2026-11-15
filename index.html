@@ -35,7 +35,7 @@
           <div class="help-spark">✳</div>
           <strong>Un plan entre todos</strong>
           <p>Organizarlo juntos es más fácil.</p>
-          <button class="text-button" data-tab="tasks">Ver cómo funciona <span>→</span></button>
+          <button class="text-button" id="tutorial-button" type="button">Ver cómo funciona <span>→</span></button>
         </div>
         <button class="profile-button" id="profile-button" title="Editar perfil">
           <span class="avatar avatar-me">D</span>
@@ -76,13 +76,14 @@
                 <h1>Barbacoa en<br class="mobile-break"> casa de Juan</h1>
                 <p class="hero-description">Un día de brasas, buena comida y mejor compañía.</p>
               </div>
-               <button class="more-button" id="delete-event-button" aria-label="Eliminar evento">···</button>
+               <button class="more-button event-only" id="delete-event-button" aria-label="Eliminar evento">···</button>
             </div>
-            <div class="event-meta">
+            <button class="primary-button empty-workspace-only hidden" id="empty-create-event-button" type="button">Crear mi primer evento <span>＋</span></button>
+            <div class="event-meta event-only">
               <div class="meta-item"><span class="meta-icon">▦</span><span><strong>Sábado, 21 de junio</strong><small>14:00 h · Quedan 12 días</small></span></div>
               <div class="meta-item"><span class="meta-icon pin-icon">⌖</span><span><strong>Casa de Juan</strong><small>Alcalá de Guadaíra <a href="#" class="map-link">Ver mapa ↗</a></small></span></div>
             </div>
-            <div class="hero-footer">
+            <div class="hero-footer event-only">
               <div class="avatar-stack" id="avatar-stack" aria-label="Asistentes confirmados">
                 <span class="avatar avatar-a">M</span><span class="avatar avatar-b">J</span><span class="avatar avatar-c">A</span><span class="avatar avatar-d">L</span>
                 <span class="avatar avatar-extra">+8</span>
@@ -367,6 +368,21 @@
       <p class="join-feedback" id="join-feedback" role="status" aria-live="polite"></p>
       <button class="primary-button modal-submit" id="join-submit" type="submit">Sí, me uno <span>✓</span></button>
     </form>
+  </dialog>
+
+  <dialog class="app-modal" id="tutorial-modal">
+    <div class="modal-form">
+      <button class="modal-close" type="button" aria-label="Cerrar">×</button>
+      <span class="section-eyebrow">GUÍA RÁPIDA</span>
+      <h2>OrganizaT en 4 pasos</h2>
+      <ol class="tutorial-list">
+        <li><strong>Crea un evento.</strong><span>Pon el nombre, fecha, lugar y elige una imagen.</span></li>
+        <li><strong>Invita al grupo.</strong><span>Comparte el enlace por WhatsApp o con otra aplicación.</span></li>
+        <li><strong>Organizad lo necesario.</strong><span>Confirmad asistencia, añadid tareas y asignad quién lleva cada cosa.</span></li>
+        <li><strong>Revisad el plan.</strong><span>Consultad notificaciones, gastos y cambios desde el resumen.</span></li>
+      </ol>
+      <button class="primary-button modal-submit" id="tutorial-create-event" type="button">Crear un evento <span>＋</span></button>
+    </div>
   </dialog>
 </body>
 </html>
