@@ -444,6 +444,9 @@ h1 { margin-bottom: 6px; color: #263a30; font-size: clamp(24px, 2.4vw, 31px); fo
   .task-preview .task-row, .task-board .task-row { padding: 15px 2px; }
   .task-main strong, .task-board .task-main strong { font-size: 15px; }
   .task-main small, .task-board .task-main small { font-size: 12px; }
+  .task-board .task-row { flex-wrap: wrap; align-items: flex-start; }
+  .task-board .task-owner { width: calc(100% - 30px); margin-left: 30px; justify-content: flex-start; white-space: normal; }
+  .task-board .task-assignee { width: 100%; max-width: none; min-height: 44px; padding: 8px 10px; font-size: 14px; }
   .attendees-panel { margin-top: 9px; padding: 14px 12px; }
   .attendee-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 5px; }
   .person-chip { padding: 5px; }

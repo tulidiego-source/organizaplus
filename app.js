@@ -1,80 +1,24 @@
-let eventTemplates = [
-  {
-    id: 'barbacoa',
-    name: 'Barbacoa en casa de Juan',
-    type: 'Barbacoa',
-    date: '2026-11-21',
-    time: '14:00',
-    location: 'Casa de Juan',
-    description: 'Un día de brasas, buena comida y mejor compañía.',
-    badge: 'Evento privado'
-  },
-  {
-    id: 'cumple',
-    name: 'Cumpleaños de Ana',
-    type: 'Cumpleaños',
-    date: '2026-11-28',
-    time: '18:00',
-    location: 'Jardín de la Abuela',
-    description: 'Tarta, música y una velada muy acogedora.',
-    badge: 'Fiesta'
-  },
-  {
-    id: 'empresa',
-    name: 'Comida de empresa',
-    type: 'Comida de empresa',
-    date: '2026-12-05',
-    time: '14:00',
-    location: 'Restaurante La Vuelta',
-    description: 'Plan de equipo y cierre del trimestre.',
-    badge: 'Trabajo'
-  }
-];
+let eventTemplates = [{
+  id: 'empty-workspace',
+  name: 'Aún no tienes eventos',
+  type: 'Organización',
+  date: '2099-01-01',
+  time: '14:00',
+  location: 'Crea tu primer evento',
+  description: 'Pulsa «Crear evento» para empezar a organizar tu próximo plan.',
+  badge: 'TU ESPACIO'
+}];
 
-let attendees = [
-  { name: 'Diego Navarro', initial: 'D', role: 'Organizador', status: 'Confirmado', color: '#e9c3aa' },
-  { name: 'María López', initial: 'M', role: 'Viene con 1 invitado', status: 'Confirmada', color: '#e8baa6' },
-  { name: 'Juan García', initial: 'J', role: 'Anfitrión', status: 'Confirmado', color: '#d6c6a9' },
-  { name: 'Ana Ruiz', initial: 'A', role: 'Participante', status: 'Confirmada', color: '#c4d6c0' },
-  { name: 'Luis Martín', initial: 'L', role: 'Participante', status: 'Confirmado', color: '#d9c2cf' },
-  { name: 'Carmen Díaz', initial: 'C', role: 'Participante', status: 'Confirmada', color: '#e7d5a9' },
-  { name: 'Pablo Torres', initial: 'P', role: 'Participante', status: 'Confirmado', color: '#b8d2d1' },
-  { name: 'Sofía Vega', initial: 'S', role: 'Participante', status: 'Confirmada', color: '#e5c4ba' },
-  { name: 'David Romero', initial: 'D', role: 'Participante', status: 'Confirmado', color: '#c9d2b5' },
-  { name: 'Elena Castro', initial: 'E', role: 'Participante', status: 'Confirmada', color: '#d3c4df' },
-  { name: 'Raúl Molina', initial: 'R', role: 'Participante', status: 'Confirmado', color: '#e4c59a' },
-  { name: 'Nuria León', initial: 'N', role: 'Participante', status: 'Confirmada', color: '#b9d1c2' },
-  { name: 'Marta Gil', initial: 'M', role: 'Participante', status: 'Pendiente', color: '#e3c6b6' },
-  { name: 'Álvaro Pérez', initial: 'Á', role: 'Participante', status: 'Pendiente', color: '#c7d3de' },
-  { name: 'Irene Soler', initial: 'I', role: 'Participante', status: 'Pendiente', color: '#d8cbb1' }
-];
-
-let tasks = [
-  { name: 'Carne variada', quantity: '5 kg', person: 'Juan García', done: true },
-  { name: 'Pan', quantity: '6 barras', person: 'María López', done: true },
-  { name: 'Carbón', quantity: '2 sacos', person: 'Diego Navarro', done: true },
-  { name: 'Refrescos', quantity: '12 botellas', person: 'Ana Ruiz', done: true },
-  { name: 'Hielo', quantity: '3 bolsas', person: '', done: false },
-  { name: 'Ensalada', quantity: 'Para compartir', person: 'Carmen Díaz', done: true },
-  { name: 'Postre', quantity: 'Algo fresquito', person: '', done: false },
-  { name: 'Servilletas y vasos', quantity: '18 personas', person: '', done: false }
-];
-
-let expenses = [
-  { name: 'Carne y embutido', amount: 87.5, person: 'Juan García', date: 'Hoy, 11:24' },
-  { name: 'Bebidas y picoteo', amount: 37.5, person: 'María López', date: 'Ayer, 18:06' }
-];
+let attendees = [];
+let tasks = [];
+let expenses = [];
 
 const colors = ['#d6c6a9', '#c4d6c0', '#d9c2cf', '#e7d5a9', '#b8d2d1', '#e5c4ba'];
 const eventImageCount = 9;
 const avatarImageCount = 12;
 let wizardImageIndex = 0;
 let selectedAvatarIndex = 0;
-let dateOptions = [
-  { date: '2026-11-21', time: '14:00', votes: 8 },
-  { date: '2026-11-22', time: '14:00', votes: 5 },
-  { date: '2026-11-28', time: '14:00', votes: 3 }
-];
+let dateOptions = [];
 let toastTimer;
 let selectedDate = '';
 let currentVote = '';
@@ -339,25 +283,21 @@ function loadPersistedData() {
     storedData = JSON.parse(serialized);
   } catch (error) {
     console.error('Unable to parse saved OrganizaT data.', error);
-    showToast('Los datos guardados no se pudieron leer; se mantiene la demo inicial.');
+    localStorage.removeItem(storageKey);
     return;
   }
   if (!isValidStoredData(storedData)) {
-    showToast('Los datos guardados no tienen un formato válido; se mantiene la demo inicial.');
+    localStorage.removeItem(storageKey);
     return;
   }
 
-  const storedRealEvents = storedData.events.filter(event => event.id !== 'empty-workspace');
-  eventTemplates = storedRealEvents.length ? storedRealEvents : storedData.events;
-  eventStates = storedData.eventStates;
   joinedInvitationNames = storedData.joinedInvitationNames && typeof storedData.joinedInvitationNames === 'object'
     ? storedData.joinedInvitationNames
     : {};
   joinedInvitationTokens = storedData.joinedInvitationTokens && typeof storedData.joinedInvitationTokens === 'object'
     ? storedData.joinedInvitationTokens
     : {};
-  currentEvent = eventTemplates.find(event => event.id === storedData.currentEventId) || eventTemplates[0];
-  restoreEventData(currentEvent.id);
+  localStorage.removeItem(storageKey);
 }
 
 function activateEvent(event) {
@@ -398,39 +338,6 @@ function showEmptyWorkspace() {
 async function loadOwnedEvents() {
   let result = await requestApi('/api/events');
   if (!result.events.length) {
-    const recoverableEvents = eventTemplates.filter(event => event.id !== 'empty-workspace' && event.inviteToken && event.ownerToken);
-    for (const event of recoverableEvents) {
-      const state = eventStates[event.id];
-      if (!state) continue;
-      try {
-        await requestApi('/api/events', {
-          method: 'POST',
-          body: JSON.stringify({
-            clientEventId: event.id,
-            event,
-            attendees: state.attendees,
-            tasks: state.tasks,
-            dateOptions: state.dateOptions,
-            expenses: state.expenses
-          })
-        });
-      } catch (error) {
-        console.warn('No se pudo recuperar el evento local.', event.id, error);
-      }
-    }
-    result = await requestApi('/api/events');
-  }
-  if (!result.events.length) {
-    const localEvents = eventTemplates.filter(event => event.id !== 'empty-workspace' && event.inviteToken);
-    if (localEvents.length) {
-      eventTemplates = localEvents;
-      currentEvent = eventTemplates[0];
-      restoreEventData(currentEvent.id);
-      renderAll();
-      persistAppState();
-      showToast('Mostrando tus eventos guardados mientras se sincroniza la cuenta.');
-      return;
-    }
     showEmptyWorkspace();
     return;
   }
