@@ -737,16 +737,25 @@ function initials(name) {
 }
 
 function renderTaskRow(task, index, interactive = false) {
+  const viewer = attendees.find(person => person.id === currentViewerAttendeeId);
+  const purchased = task.purchased === true || task.done === true;
+  const canMarkPurchased = Boolean(currentEvent.ownerToken || (viewer && task.person === viewer.name));
   const owner = task.person
-    ? `<span class="mini-avatar" style="background:${personColor(task.person)}">${initials(task.person)}</span>${task.person.split(' ')[0]}`
+    ? `<span class="mini-avatar" style="background:${personColor(task.person)}">${escapeHtml(initials(task.person))}</span>${escapeHtml(task.person)}`
     : '<span class="mini-avatar unassigned">＋</span>Pendiente';
   const proposal = task.proposalStatus === 'proposed';
   const proposalAction = proposal && currentEvent.ownerToken ? `<button class="secondary-button task-accept-button" type="button" data-accept-task="${escapeHtml(task.id || '')}">Aceptar</button>` : (proposal ? '<small class="task-proposal-label">Propuesta pendiente</small>' : '');
-  const assignmentControl = currentEvent.ownerToken && interactive && !proposal ? `<select class="task-assignee" data-task-assignee="${escapeHtml(task.id || '')}" aria-label="Asignar tarea"><option value="">Sin asignar</option>${attendees.filter(person => person.status !== 'Cancelado').map(person => `<option value="${escapeHtml(person.name)}" ${person.name === task.person ? 'selected' : ''}>${escapeHtml(person.name)}</option>`).join('')}</select>` : '';
+  const assignmentControl = currentEvent.ownerToken && interactive && !proposal ? `<select class="task-assignee" data-task-assignee="${escapeHtml(task.id || '')}" aria-label="Asignar tarea"><option value="">Sin asignar</option>${attendees.filter(person => ['Confirmado', 'Confirmada'].includes(person.status)).map(person => `<option value="${escapeHtml(person.name)}" ${person.name === task.person ? 'selected' : ''}>${escapeHtml(person.name)}</option>`).join('')}</select>` : '';
+  const claimControl = !currentEvent.ownerToken && !task.person
+    ? `<button class="task-check ${task.person ? 'done' : ''}" data-task-index="${index}" aria-label="Asignarme esta tarea" ${interactive ? '' : 'tabindex="-1"'}>＋</button>`
+    : `<span class="task-check task-check-static ${task.person ? 'done' : ''}" aria-hidden="true">${task.person ? '✓' : ''}</span>`;
+  const purchasedControl = interactive && canMarkPurchased
+    ? `<button class="task-purchased ${purchased ? 'done' : ''}" data-task-purchased="${escapeHtml(task.id || '')}" type="button" aria-label="${purchased ? 'Marcar compra pendiente' : 'Marcar como comprado'}">${purchased ? '✓' : '€'}</button>`
+    : `<span class="task-purchased task-purchased-static ${purchased ? 'done' : ''}" aria-label="${purchased ? 'Comprado' : 'Pendiente de compra'}">${purchased ? '✓' : '€'}</span>`;
   return `<div class="task-row">
-    <button class="task-check ${task.done ? 'done' : ''}" data-task-index="${index}" aria-label="${task.done ? 'Marcar pendiente' : 'Marcar completado'}" ${interactive ? '' : 'tabindex="-1"'}>${task.done ? '✓' : ''}</button>
+    ${claimControl}
     <span class="task-main"><strong>${escapeHtml(task.name)}</strong><small>${escapeHtml(task.quantity || 'Cantidad por definir')}</small></span>
-    <span class="task-owner">${assignmentControl || owner}${proposalAction}</span>
+    <span class="task-owner">${assignmentControl || owner}${proposalAction}${purchasedControl}</span>
   </div>`;
 }
 
@@ -762,22 +771,38 @@ function renderTasks() {
     button.addEventListener('click', async () => {
       const task = tasks[Number(button.dataset.taskIndex)];
       const attendeeToken = joinedInvitationTokens[currentEvent.inviteToken];
-      if (!currentEvent.ownerToken && attendeeToken && task.id) {
+      if (!currentEvent.ownerToken && task.id && !task.person) {
+        if (!attendeeToken) {
+          showToast('Necesitas estar unido al evento para asignarte esta tarea.');
+          return;
+        }
         try {
-          const action = task.person ? 'toggle' : 'claim';
-          const invitation = await requestApi(`/api/invitations/${encodeURIComponent(currentEvent.inviteToken)}/tasks/${encodeURIComponent(task.id)}`, { method: 'PATCH', headers: { 'X-Attendee-Token': attendeeToken }, body: JSON.stringify({ action }) });
+          const invitation = await requestApi(`/api/invitations/${encodeURIComponent(currentEvent.inviteToken)}/tasks/${encodeURIComponent(task.id)}`, { method: 'PATCH', headers: { 'X-Attendee-Token': attendeeToken }, body: JSON.stringify({ action: 'claim' }) });
           tasks = invitation.tasks;
           eventNotifications = invitation.notifications || eventNotifications;
           renderAll();
         } catch (error) { showToast(error.message); }
         return;
       }
-      task.done = !task.done;
-      renderTasks();
-      persistAppState();
-      syncRemoteEventState();
+      showToast('La compra se marca con el check de € cuando esté hecha.');
     });
   });
+  $$('.task-purchased').forEach(button => button.addEventListener('click', async () => {
+    const attendeeToken = joinedInvitationTokens[currentEvent.inviteToken];
+    const headers = currentEvent.ownerToken
+      ? { 'X-Organizer-Token': currentEvent.ownerToken }
+      : (attendeeToken ? { 'X-Attendee-Token': attendeeToken } : {});
+    if (!currentEvent.ownerToken && !attendeeToken) {
+      showToast('Necesitas estar unido al evento para actualizar la compra.');
+      return;
+    }
+    try {
+      const invitation = await requestApi(`/api/invitations/${encodeURIComponent(currentEvent.inviteToken)}/tasks/${encodeURIComponent(button.dataset.taskPurchased)}`, { method: 'PATCH', headers, body: JSON.stringify({ action: 'purchase' }) });
+      tasks = invitation.tasks;
+      eventNotifications = invitation.notifications || eventNotifications;
+      renderAll();
+    } catch (error) { showToast(error.message); }
+  }));
   $$('.task-accept-button').forEach(button => button.addEventListener('click', async () => {
     try {
       const invitation = await requestApi(`/api/invitations/${encodeURIComponent(currentEvent.inviteToken)}/tasks/${encodeURIComponent(button.dataset.acceptTask)}`, { method: 'PATCH', headers: { 'X-Organizer-Token': currentEvent.ownerToken }, body: JSON.stringify({ action: 'approve' }) });
@@ -937,7 +962,10 @@ function renderDateOptions() {
 }
 
 function populatePeopleOptions() {
-  const options = attendees.map(person => `<option value="${escapeHtml(person.name)}">${escapeHtml(person.name)}</option>`).join('');
+  const options = attendees
+    .filter(person => ['Confirmado', 'Confirmada'].includes(person.status))
+    .map(person => `<option value="${escapeHtml(person.name)}">${escapeHtml(person.name)}</option>`)
+    .join('');
   $('#task-person').innerHTML = `<option value="">Sin asignar</option>${options}`;
   $('#expense-person').innerHTML = options;
 }
@@ -1701,7 +1729,7 @@ $('#task-form').addEventListener('submit', event => {
   const formElement = event.currentTarget;
   const form = new FormData(event.currentTarget);
   const person = form.get('person');
-  const taskData = { name: form.get('name').trim(), quantity: form.get('quantity').trim(), person, done: false };
+  const taskData = { name: form.get('name').trim(), quantity: form.get('quantity').trim(), person, done: false, purchased: false };
   const attendeeToken = joinedInvitationTokens[currentEvent.inviteToken];
   if (!currentEvent.ownerToken && attendeeToken) {
     requestApi(`/api/invitations/${encodeURIComponent(currentEvent.inviteToken)}/tasks/proposals`, { method: 'POST', headers: { 'X-Attendee-Token': attendeeToken }, body: JSON.stringify(taskData) })
