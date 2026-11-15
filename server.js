@@ -373,6 +373,19 @@ function createAppServer(options = {}) {
       notifications: record.notifications || []
     };
   }
+
+function eventForAuthenticatedUser(record, request, user) {
+  const event = organizerEvent(record, request);
+  if (record.ownerUserId === user.id) return event;
+  const attendee = record.attendees.find(person => person.accountUserId === user.id);
+  if (!attendee) return null;
+  const { ownerToken, ...attendeeEvent } = event;
+  return {
+    ...attendeeEvent,
+    viewerAttendeeId: attendee.id,
+    viewerAttendeeToken: attendee.privateToken
+  };
+}
   const configuredUrl = options.publicAppUrl || process.env.PUBLIC_APP_URL || '';
   let configuredBaseUrl = null;
   if (configuredUrl) {
@@ -620,7 +633,10 @@ function createAppServer(options = {}) {
     if (request.method === 'GET' && url.pathname === '/api/events') {
       const user = await getAuthenticatedUser(request);
       if (!user) throw new HttpError(401, 'Inicia sesión para ver tus eventos.');
-      sendJson(response, 200, { events: records.filter(record => record.ownerUserId === user.id).map(record => organizerEvent(record, request)) });
+      const events = records
+        .map(record => eventForAuthenticatedUser(record, request, user))
+        .filter(Boolean);
+      sendJson(response, 200, { events });
       return;
     }
 

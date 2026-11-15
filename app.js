@@ -344,6 +344,10 @@ async function loadOwnedEvents() {
   eventTemplates = result.events;
   eventStates = {};
   result.events.forEach(event => {
+    if (event.viewerAttendeeToken && event.inviteToken) {
+      joinedInvitationTokens[event.inviteToken] = event.viewerAttendeeToken;
+    }
+    if (event.viewerAttendeeId) currentViewerAttendeeId = event.viewerAttendeeId;
     eventStates[event.id] = {
       attendees: cloneData(event.attendees || []),
       tasks: cloneData(event.tasks || []),
@@ -355,6 +359,9 @@ async function loadOwnedEvents() {
     };
   });
   currentEvent = eventTemplates[0];
+  currentViewerAttendeeId = currentEvent.viewerAttendeeId
+    || currentEvent.attendees?.find(person => person.name === authUser?.name)?.id
+    || '';
   restoreEventData(currentEvent.id);
   renderAll();
   persistAppState();
