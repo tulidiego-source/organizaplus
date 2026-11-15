@@ -946,7 +946,12 @@ function renderEventGallery() {
   const gallery = $('#event-gallery');
   if (!gallery) return;
   const eventCount = $('.main-nav .nav-count');
-  if (eventCount) eventCount.textContent = eventTemplates[0]?.id === 'empty-workspace' ? '0' : String(eventTemplates.length);
+  const hasRealEvents = eventTemplates.some(event => event.id !== 'empty-workspace');
+  if (eventCount) eventCount.textContent = hasRealEvents ? String(eventTemplates.length) : '0';
+  if (!hasRealEvents) {
+    gallery.innerHTML = '';
+    return;
+  }
   gallery.innerHTML = eventTemplates.map(event => `
     <button class="event-gallery-card ${event.id === currentEvent.id ? 'active' : ''}" data-event-id="${event.id}" type="button">
       <span class="event-card-image" style="${spriteStyle('/eventos.png', Number.isInteger(event.imageIndex) ? event.imageIndex : 0, 3, 3)}" aria-hidden="true"></span>
@@ -990,11 +995,18 @@ function renderCurrentEvent() {
   if (heroDescription) heroDescription.textContent = currentEvent.description;
   const heroImage = document.querySelector('.hero-image');
   if (heroImage) {
-    const imageIndex = Number.isInteger(currentEvent.imageIndex) ? currentEvent.imageIndex : 0;
-    heroImage.style.backgroundImage = "url('/eventos.png')";
-    heroImage.style.backgroundSize = '300% 300%';
-    heroImage.style.backgroundPosition = `${(imageIndex % 3) * 50}% ${Math.floor(imageIndex / 3) * 50}%`;
-    heroImage.classList.add('event-image-selected');
+    if (currentEvent.id === 'empty-workspace') {
+      heroImage.style.backgroundImage = '';
+      heroImage.style.backgroundSize = '';
+      heroImage.style.backgroundPosition = '';
+      heroImage.classList.remove('event-image-selected');
+    } else {
+      const imageIndex = Number.isInteger(currentEvent.imageIndex) ? currentEvent.imageIndex : 0;
+      heroImage.style.backgroundImage = "url('/eventos.png')";
+      heroImage.style.backgroundSize = '300% 300%';
+      heroImage.style.backgroundPosition = `${(imageIndex % 3) * 50}% ${Math.floor(imageIndex / 3) * 50}%`;
+      heroImage.classList.add('event-image-selected');
+    }
   }
   const meta = document.querySelectorAll('.meta-item strong');
   if (meta.length > 0) {
