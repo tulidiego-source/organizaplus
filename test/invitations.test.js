@@ -198,6 +198,31 @@ test('an attendee can only edit their attendance and propose tasks', async () =>
   }
 });
 
+test('group growth notices count confirmed people, not pending invitations', async () => {
+  const context = await startTestServer();
+  try {
+    const payload = invitationPayload(20);
+    payload.attendees.push(
+      { name: 'Pendiente 1', role: 'Participante', status: 'Pendiente' },
+      { name: 'Pendiente 2', role: 'Participante', status: 'Pendiente' },
+      { name: 'Pendiente 3', role: 'Participante', status: 'Pendiente' },
+      { name: 'Pendiente 4', role: 'Participante', status: 'Pendiente' }
+    );
+    const created = await requestJson(context.baseUrl, '/api/events', 'POST', payload);
+    const token = created.body.inviteToken;
+    for (const name of ['Ana', 'Luis', 'Marta']) {
+      await requestJson(context.baseUrl, `/api/invitations/${token}/join`, 'POST', { name });
+    }
+    let invitation = await requestJson(context.baseUrl, `/api/invitations/${token}`, 'GET', undefined, { 'X-Organizer-Token': created.body.ownerToken });
+    assert.equal(invitation.body.notifications.some(notification => notification.title === '¡El grupo crece!'), false);
+    await requestJson(context.baseUrl, `/api/invitations/${token}/join`, 'POST', { name: 'Pablo' });
+    invitation = await requestJson(context.baseUrl, `/api/invitations/${token}`, 'GET', undefined, { 'X-Organizer-Token': created.body.ownerToken });
+    assert.equal(invitation.body.notifications.some(notification => notification.title === '¡El grupo crece!'), true);
+  } finally {
+    await context.cleanup();
+  }
+});
+
 test('shared tasks, votes and expenses survive an invitation state update', async () => {
   const context = await startTestServer();
   try {

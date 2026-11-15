@@ -85,13 +85,14 @@ function normalizeAttendees(input) {
       color,
       ...(typeof person.email === 'string' ? { email: person.email.slice(0, 254).trim().toLowerCase() } : {}),
       id: typeof person.id === 'string' ? person.id : `initial-${index}`,
-      privateToken: typeof person.privateToken === 'string' ? person.privateToken : crypto.randomBytes(24).toString('base64url')
+      privateToken: typeof person.privateToken === 'string' ? person.privateToken : crypto.randomBytes(24).toString('base64url'),
+      ...(typeof person.accountUserId === 'string' ? { accountUserId: person.accountUserId } : {})
     };
   });
 }
 
 function attendeeHeadcount(attendees) {
-  return attendees.reduce((total, person) => total + (person.status === 'Cancelado' ? 0 : (person.adults || 1) + (person.children || 0)), 0);
+  return attendees.reduce((total, person) => total + (['Confirmado', 'Confirmada'].includes(person.status) ? (person.adults || 1) + (person.children || 0) : 0), 0);
 }
 
 function normalizeTasks(input) {
@@ -150,7 +151,7 @@ function normalizeExpenses(input) {
 }
 
 function publicAttendees(attendees) {
-  return attendees.map(({ email, privateToken, ...person }) => person);
+  return attendees.map(({ email, privateToken, accountUserId, ...person }) => person);
 }
 
 function publicInvitation(record, request) {
@@ -433,7 +434,7 @@ function createAppServer(options = {}) {
         ownerToken: row.owner_token,
         event: row.event,
         attendees: normalizeAttendees(row.attendees),
-        tasks: row.tasks,
+        tasks: normalizeTasks(row.tasks),
         dateOptions: row.date_options,
         expenses: row.expenses || [],
         notifications: row.notifications || [],
@@ -444,7 +445,7 @@ function createAppServer(options = {}) {
           const contents = await fs.readFile(databaseFile, 'utf8');
           const parsed = JSON.parse(contents);
           if (Array.isArray(parsed.events) && parsed.events.length) {
-            records = parsed.events.map(record => ({ ...record, attendees: normalizeAttendees(record.attendees) }));
+            records = parsed.events.map(record => ({ ...record, attendees: normalizeAttendees(record.attendees), tasks: normalizeTasks(record.tasks) }));
             await saveStore();
           }
         } catch (error) {
@@ -457,7 +458,7 @@ function createAppServer(options = {}) {
       const contents = await fs.readFile(databaseFile, 'utf8');
       const parsed = JSON.parse(contents);
       if (!Array.isArray(parsed.events)) throw new Error('El archivo de eventos no tiene un formato válido.');
-      records = parsed.events;
+      records = parsed.events.map(record => ({ ...record, attendees: normalizeAttendees(record.attendees), tasks: normalizeTasks(record.tasks) }));
     } catch (error) {
       if (error.code === 'ENOENT') return;
       throw error;
@@ -728,11 +729,14 @@ function createAppServer(options = {}) {
     const attendeeDeleteMatch = url.pathname.match(/^\/api\/invitations\/([A-Za-z0-9_-]{32})\/attendees\/([A-Za-z0-9_-]+)$/);
     if (request.method === 'PATCH' && attendeeDeleteMatch) {
       const body = await readJsonBody(request);
+      const authenticatedUser = await getAuthenticatedUser(request);
       const result = await mutateStore(() => {
         const record = records.find(item => item.token === attendeeDeleteMatch[1]);
         if (!record) throw new HttpError(404, 'La invitación no existe o ha caducado.');
         const attendee = record.attendees.find(person => person.id === attendeeDeleteMatch[2]);
-        if (!attendee || attendee.privateToken !== request.headers['x-attendee-token']) {
+        const isLinkedAccount = authenticatedUser && attendee
+          && attendee.accountUserId === authenticatedUser.id;
+        if (!attendee || (attendee.privateToken !== request.headers['x-attendee-token'] && !isLinkedAccount)) {
           throw new HttpError(403, 'Solo puedes modificar tu propia asistencia.');
         }
         const status = body && body.status === 'Cancelado' ? 'Cancelado' : 'Confirmado';
@@ -878,7 +882,8 @@ function createAppServer(options = {}) {
         const existing = record.attendees.find(person =>
           person.name.toLocaleLowerCase('es-ES') === normalizedName
         );
-        if (existing && ['Confirmado', 'Confirmada'].includes(existing.status)) {
+        const linkedExistingAccount = user && existing && (existing.accountUserId === user.id || existing.email === user.email);
+        if (existing && ['Confirmado', 'Confirmada'].includes(existing.status) && !linkedExistingAccount) {
           throw new HttpError(409, 'Ya hay una persona confirmada con ese nombre. Añade tu apellido para distinguirte.');
         }
         const additionalAdults = body && body.adults === undefined ? 0 : Number(body && body.adults);
@@ -899,6 +904,7 @@ function createAppServer(options = {}) {
           existing.role = 'Participante';
           existing.adults = partyAdults;
           existing.children = children;
+          if (user) existing.accountUserId = user.id;
         } else {
           record.attendees.push({
             id: crypto.randomUUID(),
@@ -909,7 +915,8 @@ function createAppServer(options = {}) {
             adults: partyAdults,
             children,
             color: '#c4d6c0',
-            privateToken: crypto.randomBytes(24).toString('base64url')
+            privateToken: crypto.randomBytes(24).toString('base64url'),
+            ...(user ? { accountUserId: user.id } : {})
           });
         }
         const nextHeadcount = attendeeHeadcount(record.attendees);

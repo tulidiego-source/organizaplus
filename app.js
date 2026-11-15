@@ -395,8 +395,41 @@ function showEmptyWorkspace() {
 }
 
 async function loadOwnedEvents() {
-  const result = await requestApi('/api/events');
+  let result = await requestApi('/api/events');
   if (!result.events.length) {
+    const recoverableEvents = eventTemplates.filter(event => event.id !== 'empty-workspace' && event.inviteToken && event.ownerToken);
+    for (const event of recoverableEvents) {
+      const state = eventStates[event.id];
+      if (!state) continue;
+      try {
+        await requestApi('/api/events', {
+          method: 'POST',
+          body: JSON.stringify({
+            clientEventId: event.id,
+            event,
+            attendees: state.attendees,
+            tasks: state.tasks,
+            dateOptions: state.dateOptions,
+            expenses: state.expenses
+          })
+        });
+      } catch (error) {
+        console.warn('No se pudo recuperar el evento local.', event.id, error);
+      }
+    }
+    result = await requestApi('/api/events');
+  }
+  if (!result.events.length) {
+    const localEvents = eventTemplates.filter(event => event.id !== 'empty-workspace' && event.inviteToken);
+    if (localEvents.length) {
+      eventTemplates = localEvents;
+      currentEvent = eventTemplates[0];
+      restoreEventData(currentEvent.id);
+      renderAll();
+      persistAppState();
+      showToast('Mostrando tus eventos guardados mientras se sincroniza la cuenta.');
+      return;
+    }
     showEmptyWorkspace();
     return;
   }
@@ -698,6 +731,7 @@ async function syncRemoteEventState(showError = false) {
     tasks = invitation.tasks;
     dateOptions = invitation.dateOptions;
     expenses = invitation.expenses || [];
+    eventNotifications = invitation.notifications || eventNotifications;
     saveCurrentEventData();
     renderAll();
     persistAppState();
@@ -951,7 +985,7 @@ function renderEventGallery() {
   if (eventCount) eventCount.textContent = eventTemplates[0]?.id === 'empty-workspace' ? '0' : String(eventTemplates.length);
   gallery.innerHTML = eventTemplates.map(event => `
     <button class="event-gallery-card ${event.id === currentEvent.id ? 'active' : ''}" data-event-id="${event.id}" type="button">
-      <span class="event-card-image" style="${spriteStyle('eventos.png', Number.isInteger(event.imageIndex) ? event.imageIndex : 0, 3, 3)}" aria-hidden="true"></span>
+      <span class="event-card-image" style="${spriteStyle('/eventos.png', Number.isInteger(event.imageIndex) ? event.imageIndex : 0, 3, 3)}" aria-hidden="true"></span>
       <span class="tag">${escapeHtml(event.badge)}</span>
       <h3>${escapeHtml(event.name)}</h3>
       <p>${escapeHtml(event.description)}</p>
@@ -1781,9 +1815,9 @@ async function loadInvitationFromLink() {
     eventTemplates = [remoteEvent, ...eventTemplates.filter(event => event.id !== remoteEvent.id)];
     eventStates[remoteEvent.id] = {
       attendees: cloneData(invitation.attendees),
-      tasks: existingState ? cloneData(existingState.tasks) : cloneData(invitation.tasks),
-      expenses: existingState ? cloneData(existingState.expenses) : [],
-      dateOptions: existingState ? cloneData(existingState.dateOptions) : cloneData(invitation.dateOptions),
+      tasks: cloneData(invitation.tasks),
+      expenses: cloneData(invitation.expenses || []),
+      dateOptions: cloneData(invitation.dateOptions),
       selectedDate: existingState ? existingState.selectedDate : remoteEvent.date,
       currentVote: existingState ? existingState.currentVote : '',
       notifications: cloneData(invitation.notifications || [])
@@ -1822,10 +1856,10 @@ $('#join-form').addEventListener('submit', async event => {
   submitButton.disabled = true;
   $('#join-feedback').textContent = 'Guardando tu confirmación…';
   try {
-    if (editingOwnAttendance && currentViewerAttendeeId && joinedInvitationTokens[activeInviteToken]) {
+    if (editingOwnAttendance && currentViewerAttendeeId && (joinedInvitationTokens[activeInviteToken] || authUser)) {
       const updated = await requestApi(`/api/invitations/${encodeURIComponent(activeInviteToken)}/attendees/${encodeURIComponent(currentViewerAttendeeId)}`, {
         method: 'PATCH',
-        headers: { 'X-Attendee-Token': joinedInvitationTokens[activeInviteToken] },
+        headers: joinedInvitationTokens[activeInviteToken] ? { 'X-Attendee-Token': joinedInvitationTokens[activeInviteToken] } : {},
         body: JSON.stringify({ status: 'Confirmado', adults: 1 + additionalAdults, children })
       });
       attendees = updated.attendees;
