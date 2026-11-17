@@ -1054,14 +1054,8 @@ function renderEventGallery() {
   }
   gallery.innerHTML = eventTemplates.map(event => `
     <button class="event-gallery-card ${event.id === currentEvent.id ? 'active' : ''}" data-event-id="${event.id}" type="button">
-      <span class="event-card-image" style="${spriteStyle('/eventos.png', Number.isInteger(event.imageIndex) ? event.imageIndex : 0, 3, 3)}" aria-hidden="true"></span>
-      <span class="tag">${escapeHtml(event.badge)}</span>
-      <h3>${escapeHtml(event.name)}</h3>
-      <p>${escapeHtml(event.description)}</p>
-      <div class="meta">
-        <span>${formatDate(event.date)}</span>
-        <span>${escapeHtml(event.location)}</span>
-      </div>
+      <span class="event-card-indicator" aria-hidden="true">${event.id === currentEvent.id ? '✓' : '·'}</span>
+      <span class="event-card-copy"><h3>${escapeHtml(event.name)}</h3><small>${formatDate(event.date)} · ${escapeHtml(event.location)}</small></span>
     </button>
   `).join('');
   $$('.event-gallery-card').forEach(card => {
