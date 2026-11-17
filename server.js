@@ -1069,6 +1069,7 @@ function eventForAuthenticatedUser(record, request, user) {
             if (!previous) {
               taskNotifications.push({
                 id: crypto.randomUUID(), audience: 'all',
+                targetId: task.id, targetType: 'task',
                 title: 'Nueva cosa para llevar',
                 detail: task.person ? `Se ha añadido «${task.name}» y la llevará ${task.person}.` : `Se ha añadido «${task.name}»; queda pendiente de asignar.`,
                 createdAt: new Date().toISOString()
@@ -1076,6 +1077,7 @@ function eventForAuthenticatedUser(record, request, user) {
             } else if (previous.person !== task.person) {
               taskNotifications.push({
                 id: crypto.randomUUID(), audience: 'all',
+                targetId: task.id, targetType: 'task',
                 title: task.person ? 'Tarea asignada' : 'Tarea liberada',
                 detail: task.person ? `«${task.name}» la llevará ${task.person}.` : `«${task.name}» vuelve a estar pendiente de asignar.`,
                 createdAt: new Date().toISOString()
@@ -1083,6 +1085,7 @@ function eventForAuthenticatedUser(record, request, user) {
             } else if (previous.purchased !== task.purchased) {
               taskNotifications.push({
                 id: crypto.randomUUID(), audience: 'all',
+                targetId: task.id, targetType: 'task',
                 title: task.purchased ? 'Cosa comprada' : 'Compra pendiente',
                 detail: task.purchased ? `«${task.name}» ya está comprada.` : `«${task.name}» vuelve a estar pendiente de compra.`,
                 createdAt: new Date().toISOString()
@@ -1108,7 +1111,7 @@ function eventForAuthenticatedUser(record, request, user) {
         const task = normalizeTasks([{ name: body && body.name, quantity: body && body.quantity || '', person: '', done: false, proposalStatus: 'proposed', proposedBy: attendee.id }])[0];
         record.tasks.push(task);
         record.notifications = [...(record.notifications || []), {
-          id: crypto.randomUUID(), audience: 'organizer', title: `${attendee.name} propone añadir algo`,
+          id: crypto.randomUUID(), audience: 'organizer', targetId: task.id, targetType: 'task', title: `${attendee.name} propone añadir algo`,
           detail: `${task.name}${task.quantity ? ` · ${task.quantity}` : ''}. Revisa la propuesta en la lista.`, createdAt: new Date().toISOString()
         }];
         return publicInvitation(record, request);
@@ -1129,16 +1132,16 @@ function eventForAuthenticatedUser(record, request, user) {
         if (body && body.action === 'approve') {
           if (!isOrganizer) throw new HttpError(403, 'Solo el organizador puede aceptar propuestas.');
           task.proposalStatus = 'accepted';
-          record.notifications = [...(record.notifications || []), { id: crypto.randomUUID(), audience: 'all', title: 'Propuesta aceptada', detail: `«${task.name}» ya forma parte de la lista.`, createdAt: new Date().toISOString() }, { id: crypto.randomUUID(), recipientId: task.proposedBy, title: 'Tu propuesta ha sido aceptada', detail: `«${task.name}» ya está en la lista del evento.`, createdAt: new Date().toISOString() }];
+          record.notifications = [...(record.notifications || []), { id: crypto.randomUUID(), audience: 'all', targetId: task.id, targetType: 'task', title: 'Propuesta aceptada', detail: `«${task.name}» ya forma parte de la lista.`, createdAt: new Date().toISOString() }, { id: crypto.randomUUID(), recipientId: task.proposedBy, targetId: task.id, targetType: 'task', title: 'Tu propuesta ha sido aceptada', detail: `«${task.name}» ya está en la lista del evento.`, createdAt: new Date().toISOString() }];
         } else if (body && body.action === 'claim') {
           if (!attendee || !['Confirmado', 'Confirmada'].includes(attendee.status)) throw new HttpError(403, 'Solo los asistentes confirmados pueden asignarse tareas.');
           task.person = attendee.name;
-          record.notifications = [...(record.notifications || []), { id: crypto.randomUUID(), audience: 'all', title: 'Tarea asignada', detail: `${attendee.name} se encarga de «${task.name}».`, createdAt: new Date().toISOString() }];
+          record.notifications = [...(record.notifications || []), { id: crypto.randomUUID(), audience: 'all', targetId: task.id, targetType: 'task', title: 'Tarea asignada', detail: `${attendee.name} se encarga de «${task.name}».`, createdAt: new Date().toISOString() }];
         } else if (body && body.action === 'purchase') {
           if (!isOrganizer && (!attendee || !['Confirmado', 'Confirmada'].includes(attendee.status) || task.person !== attendee.name)) throw new HttpError(403, 'Solo la persona encargada o el organizador pueden marcar una compra.');
           task.purchased = !task.purchased;
           task.done = task.purchased;
-          record.notifications = [...(record.notifications || []), { id: crypto.randomUUID(), audience: 'all', title: task.purchased ? 'Cosa comprada' : 'Compra pendiente', detail: task.purchased ? `«${task.name}» ya está comprada.` : `«${task.name}» vuelve a estar pendiente de compra.`, createdAt: new Date().toISOString() }];
+          record.notifications = [...(record.notifications || []), { id: crypto.randomUUID(), audience: 'all', targetId: task.id, targetType: 'task', title: task.purchased ? 'Cosa comprada' : 'Compra pendiente', detail: task.purchased ? `«${task.name}» ya está comprada.` : `«${task.name}» vuelve a estar pendiente de compra.`, createdAt: new Date().toISOString() }];
         } else if (isOrganizer) {
           const requestedPerson = typeof body.person === 'string' ? body.person : task.person;
           if (requestedPerson && !record.attendees.some(person => ['Confirmado', 'Confirmada'].includes(person.status) && person.name === requestedPerson)) {
@@ -1146,7 +1149,7 @@ function eventForAuthenticatedUser(record, request, user) {
           }
           task.person = requestedPerson;
           task.done = typeof body.done === 'boolean' ? body.done : task.done;
-          record.notifications = [...(record.notifications || []), { id: crypto.randomUUID(), audience: 'all', title: task.person ? 'Tarea asignada' : 'Tarea liberada', detail: task.person ? `«${task.name}» la hará ${task.person}.` : `«${task.name}» vuelve a estar pendiente de asignar.`, createdAt: new Date().toISOString() }];
+          record.notifications = [...(record.notifications || []), { id: crypto.randomUUID(), audience: 'all', targetId: task.id, targetType: 'task', title: task.person ? 'Tarea asignada' : 'Tarea liberada', detail: task.person ? `«${task.name}» la hará ${task.person}.` : `«${task.name}» vuelve a estar pendiente de asignar.`, createdAt: new Date().toISOString() }];
         } else {
           throw new HttpError(403, 'No tienes permiso para modificar esta tarea.');
         }

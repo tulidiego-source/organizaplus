@@ -1219,6 +1219,39 @@ function sectionHasUnseen(tab) {
   return sectionPendingItems(tab).some(id => !seen.has(id));
 }
 
+function notificationDestinationTab(notification) {
+  if (notification?.targetType === 'attendee') return 'attendees';
+  if (notification?.targetType === 'task') return 'tasks';
+  if (notification?.targetType === 'expense') return 'expenses';
+  if (notification?.targetType === 'chat') return 'chat';
+  if (notification?.targetType === 'photo') return 'photos';
+  const text = `${notification?.title || ''} ${notification?.detail || ''}`.toLocaleLowerCase('es-ES');
+  if (text.includes('chat') || text.includes('mensaje')) return 'chat';
+  if (text.includes('foto') || text.includes('álbum')) return 'photos';
+  if (text.includes('asist') || text.includes('unido') || text.includes('confirm') || text.includes('cancel')) return 'attendees';
+  if (text.includes('tarea') || text.includes('llevar') || text.includes('propuesta') || text.includes('comprad')) return 'tasks';
+  if (text.includes('ticket') || text.includes('gasto') || text.includes('pag')) return 'expenses';
+  return 'overview';
+}
+
+function unreadSectionNotifications(tab) {
+  const viewerKey = currentEvent.ownerToken
+    ? `organizer:${currentEvent.ownerToken}`
+    : (currentViewerAttendeeId ? `attendee:${currentViewerAttendeeId}` : '');
+  return eventNotifications.filter(notification => (
+    notificationDestinationTab(notification) === tab
+    && (!viewerKey || !Array.isArray(notification.readBy) || !notification.readBy.includes(viewerKey))
+  ));
+}
+
+function viewSectionChanges(tab) {
+  if (!['attendees', 'tasks'].includes(tab)) return;
+  const unread = unreadSectionNotifications(tab);
+  unread.forEach(notification => highlightNotificationTarget(notification, tab));
+  const ids = unread.map(notification => notification.id).filter(Boolean);
+  if (ids.length) queueNotificationRead(ids);
+}
+
 function highlightNotificationTarget(notification, tab) {
   if (!notification) return;
   const text = `${notification.title || ''} ${notification.detail || ''}`.toLocaleLowerCase('es-ES');
@@ -1287,6 +1320,7 @@ function setTab(tab, options = {}) {
   if (['chat', 'photos'].includes(currentTab)) loadCommunity();
   if (options.highlight) highlightNotificationTarget(options.notification, currentTab);
   if (['attendees', 'tasks'].includes(currentTab)) {
+    viewSectionChanges(currentTab);
     markSectionViewed(currentTab);
     renderNotifications();
   }
@@ -1416,19 +1450,10 @@ function renderNotifications() {
     : (currentViewerAttendeeId ? `attendee:${currentViewerAttendeeId}` : '');
   const unreadCount = eventNotifications.filter(notification => !viewerKey || !Array.isArray(notification.readBy) || !notification.readBy.includes(viewerKey)).length;
   announceNewNotifications(eventNotifications, viewerKey);
-  const notificationTab = notification => {
-    const text = `${notification.title || ''} ${notification.detail || ''}`.toLocaleLowerCase('es-ES');
-    if (text.includes('chat') || text.includes('mensaje')) return 'chat';
-    if (text.includes('foto') || text.includes('álbum')) return 'photos';
-    if (text.includes('asist') || text.includes('unido') || text.includes('confirm') || text.includes('cancel')) return 'attendees';
-    if (text.includes('tarea') || text.includes('llevar') || text.includes('propuesta') || text.includes('comprad')) return 'tasks';
-    if (text.includes('ticket') || text.includes('gasto') || text.includes('pag')) return 'expenses';
-    return 'overview';
-  };
   const unreadTabs = new Set();
   eventNotifications.forEach(notification => {
     const isUnread = !viewerKey || !Array.isArray(notification.readBy) || !notification.readBy.includes(viewerKey);
-    if (isUnread) unreadTabs.add(notificationTab(notification));
+    if (isUnread) unreadTabs.add(notificationDestinationTab(notification));
   });
   const pendingAttendeesUnread = sectionHasUnseen('attendees');
   const unassignedTasksUnread = sectionHasUnseen('tasks');
@@ -1450,7 +1475,9 @@ function renderNotifications() {
       id: notification.id || '',
       title: notification.title || 'Evento actualizado',
       detail: notification.detail || 'Hay cambios nuevos en este evento.',
-       tab: notificationTab(notification),
+       tab: notificationDestinationTab(notification),
+       targetId: notification.targetId || '',
+       targetType: notification.targetType || '',
       unread: isUnread
     });
   });
