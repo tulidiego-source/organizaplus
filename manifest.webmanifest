@@ -1,0 +1,15 @@
+{
+  "name": "OrganizaT · Tu evento, en orden",
+  "short_name": "OrganizaT",
+  "description": "Organiza eventos, asistentes, tareas y gastos en un solo sitio.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f7f7f3",
+  "theme_color": "#245c43",
+  "lang": "es",
+  "icons": [
+    { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}

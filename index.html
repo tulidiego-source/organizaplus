@@ -4,6 +4,8 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#f7f6f2">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
   <title>OrganizaT · Tu evento, en orden</title>
   <link rel="stylesheet" href="styles.css">
   <script src="app.js" defer></script>
@@ -38,6 +40,7 @@
           <strong>Un plan entre todos</strong>
           <p>Organizarlo juntos es más fácil.</p>
           <button class="text-button" id="tutorial-button" type="button">Ver cómo funciona <span>→</span></button>
+          <button class="text-button install-app-button hidden" id="install-app-button" type="button">Instalar OrganizaT <span>＋</span></button>
         </div>
         <button class="profile-button" id="profile-button" title="Editar perfil">
           <span class="avatar avatar-me">D</span>
@@ -222,6 +225,12 @@
       <span class="section-eyebrow">TU PERFIL</span>
       <h2>Personaliza tu cuenta</h2>
       <p>Tu nombre y avatar aparecerán al organizar eventos.</p>
+      <div class="push-settings">
+        <strong>Notificaciones en el móvil</strong>
+        <p>Actívalas para enterarte de cambios, mensajes y fotos aunque no tengas la app abierta.</p>
+        <button class="secondary-button" id="enable-push-button" type="button">Activar notificaciones</button>
+        <small class="sync-note" id="push-feedback"></small>
+      </div>
       <label for="profile-name">Nombre</label>
       <input id="profile-name" name="name" maxlength="60" required>
       <label>Elige tu avatar</label>

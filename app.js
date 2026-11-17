@@ -48,6 +48,54 @@ let communityMessages = [];
 let eventPhotos = [];
 let communityLoading = false;
 let communityLoadedToken = '';
+let serviceWorkerRegistration = null;
+let deferredInstallPrompt = null;
+
+function registerProgressiveApp() {
+  if (!('serviceWorker' in navigator)) return;
+  navigator.serviceWorker.register('/sw.js').then(registration => {
+    serviceWorkerRegistration = registration;
+  }).catch(error => console.warn('No se pudo activar el modo instalable.', error));
+}
+
+function base64ToBytes(value) {
+  const padding = '='.repeat((4 - value.length % 4) % 4);
+  const base64 = (value + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const raw = atob(base64);
+  return Uint8Array.from([...raw].map(character => character.charCodeAt(0)));
+}
+
+async function enablePushNotifications() {
+  const feedback = $('#push-feedback');
+  const button = $('#enable-push-button');
+  if (!currentEvent?.inviteToken) {
+    feedback.textContent = 'Primero entra en un evento.';
+    return;
+  }
+  if (!('Notification' in window) || !('PushManager' in window) || !('serviceWorker' in navigator)) {
+    feedback.textContent = 'Este navegador no admite notificaciones push.';
+    return;
+  }
+  button.disabled = true;
+  feedback.textContent = 'Preparando las notificaciones…';
+  try {
+    const keyResult = await requestApi('/api/push/public-key');
+    if (!keyResult.enabled || !keyResult.publicKey) throw new Error('El servidor todavía no tiene activadas las notificaciones push.');
+    const permission = await Notification.requestPermission();
+    if (permission !== 'granted') throw new Error('Has bloqueado las notificaciones. Puedes permitirlas desde los ajustes del navegador.');
+    const registration = serviceWorkerRegistration || await navigator.serviceWorker.ready;
+    const subscription = await registration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: base64ToBytes(keyResult.publicKey) });
+    await requestApi(`/api/invitations/${encodeURIComponent(currentEvent.inviteToken)}/push-subscriptions`, {
+      method: 'POST', headers: communityHeaders(), body: JSON.stringify(subscription.toJSON())
+    });
+    feedback.textContent = 'Notificaciones activadas para este evento.';
+    showToast('Te avisaremos de los cambios del evento.');
+  } catch (error) {
+    feedback.textContent = error.message;
+  } finally {
+    button.disabled = false;
+  }
+}
 
 async function requestApi(route, options = {}) {
   let response;
@@ -1450,6 +1498,24 @@ $('#join-guest-button').addEventListener('click', () => {
 });
 
 $('#profile-button').addEventListener('click', openProfile);
+$('#enable-push-button').addEventListener('click', enablePushNotifications);
+
+window.addEventListener('beforeinstallprompt', event => {
+  event.preventDefault();
+  deferredInstallPrompt = event;
+  $('#install-app-button').classList.remove('hidden');
+});
+
+$('#install-app-button').addEventListener('click', async () => {
+  if (!deferredInstallPrompt) {
+    showToast('En el móvil usa el menú del navegador y elige «Añadir a pantalla de inicio».');
+    return;
+  }
+  deferredInstallPrompt.prompt();
+  await deferredInstallPrompt.userChoice;
+  deferredInstallPrompt = null;
+  $('#install-app-button').classList.add('hidden');
+});
 
 $('#avatar-picker').addEventListener('click', event => {
   const choice = event.target.closest('[data-avatar-index]');
@@ -2131,6 +2197,7 @@ function renderAll() {
 }
 
 document.body.classList.add('app-loading');
+registerProgressiveApp();
 loadPersistedData();
 renderAll();
 bootstrapAuth();

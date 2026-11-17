@@ -43,6 +43,12 @@ button { color: inherit; cursor: pointer; }
 .help-spark { display: grid; place-items: center; width: 27px; height: 27px; margin-bottom: 12px; border-radius: 9px; background: #eff3e8; color: #71915f; font-size: 17px; }
 .help-card strong { font-size: 12px; }
 .help-card p { margin: 6px 0 12px; color: var(--muted); font-size: 11px; }
+.help-card .install-app-button { display: block; margin-top: 10px; }
+.push-settings { margin: 16px 0 4px; padding: 13px; border: 1px solid #e6eee5; border-radius: 10px; background: #f7fbf5; }
+.push-settings strong { display: block; margin-bottom: 5px; font-size: 12px; }
+.push-settings p { margin: 0 0 10px; color: var(--muted); font-size: 11px; line-height: 1.45; }
+.push-settings .secondary-button { width: 100%; justify-content: center; }
+.push-settings .sync-note { display: block; margin-top: 8px; line-height: 1.35; }
 .text-button, .panel-link, .quiet-button { padding: 0; border: 0; background: none; color: var(--green); font-size: 11px; font-weight: 700; }
 .text-button span, .panel-link span, .quiet-button span { padding-left: 4px; font-size: 14px; }
 .profile-button { display: flex; align-items: center; width: 100%; gap: 10px; margin-top: 17px; padding: 13px 7px 0; border: 0; border-top: 1px solid #eff0ec; background: none; text-align: left; }

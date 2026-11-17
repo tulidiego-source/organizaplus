@@ -24,7 +24,10 @@ const allowedStaticFiles = new Map([
   ['/app.js', ['app.js', 'text/javascript; charset=utf-8']],
   ['/styles.css', ['styles.css', 'text/css; charset=utf-8']],
   ['/eventos.png', ['eventos.png', 'image/png']],
-  ['/avatars.png', ['avatars.png', 'image/png']]
+  ['/avatars.png', ['avatars.png', 'image/png']],
+  ['/manifest.webmanifest', ['manifest.webmanifest', 'application/manifest+json; charset=utf-8']],
+  ['/sw.js', ['sw.js', 'text/javascript; charset=utf-8']],
+  ['/icon.svg', ['icon.svg', 'image/svg+xml']]
 ]);
 
 class HttpError extends Error {
@@ -390,6 +393,12 @@ function createAppServer(options = {}) {
       ssl: process.env.DATABASE_SSL === 'false' ? false : { rejectUnauthorized: false }
     });
   }
+  let webpush = null;
+  try { webpush = require('web-push'); } catch (error) { console.warn('web-push no está instalado; las notificaciones push quedan desactivadas.'); }
+  const vapidPublicKey = process.env.VAPID_PUBLIC_KEY || '';
+  const vapidPrivateKey = process.env.VAPID_PRIVATE_KEY || '';
+  const vapidSubject = process.env.VAPID_SUBJECT || 'mailto:organizat@example.com';
+  if (webpush && vapidPublicKey && vapidPrivateKey) webpush.setVapidDetails(vapidSubject, vapidPublicKey, vapidPrivateKey);
 
   async function getAuthenticatedUser(request) {
     if (!pool) return null;
@@ -499,6 +508,18 @@ function eventForAuthenticatedUser(record, request, user) {
       await pool.query("ALTER TABLE invitation_events ADD COLUMN IF NOT EXISTS notifications JSONB NOT NULL DEFAULT '[]'::jsonb");
       await pool.query("ALTER TABLE invitation_events ADD COLUMN IF NOT EXISTS chat_messages JSONB NOT NULL DEFAULT '[]'::jsonb");
       await pool.query("ALTER TABLE invitation_events ADD COLUMN IF NOT EXISTS photos JSONB NOT NULL DEFAULT '[]'::jsonb");
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS push_subscriptions (
+          id TEXT PRIMARY KEY,
+          event_token TEXT NOT NULL REFERENCES invitation_events(token) ON DELETE CASCADE,
+          viewer_key TEXT NOT NULL,
+          endpoint TEXT NOT NULL,
+          p256dh TEXT NOT NULL,
+          auth TEXT NOT NULL,
+          created_at TIMESTAMPTZ NOT NULL,
+          UNIQUE(event_token, viewer_key, endpoint)
+        )
+      `);
       const result = await pool.query('SELECT id, client_event_id, owner_user_id, token, owner_token, event, attendees, tasks, date_options, expenses, chat_messages, photos, notifications, created_at FROM invitation_events ORDER BY created_at');
       records = result.rows.map(row => ({
         id: row.id,
@@ -598,8 +619,15 @@ function eventForAuthenticatedUser(record, request, user) {
 
   function mutateStore(mutator) {
     const operation = mutationQueue.then(async () => {
+      const previousNotificationIds = new Map(records.map(record => [record.token, new Set((record.notifications || []).map(notification => notification.id))]));
       const result = await mutator();
       await saveStore();
+      for (const record of records) {
+        const previousIds = previousNotificationIds.get(record.token) || new Set();
+        for (const notification of record.notifications || []) {
+          if (!previousIds.has(notification.id)) void sendPushForEvent(record.token, notification);
+        }
+      }
       return result;
     });
     mutationQueue = operation.then(() => undefined, () => undefined);
@@ -615,7 +643,33 @@ function eventForAuthenticatedUser(record, request, user) {
     return { organizer, attendee };
   }
 
+  async function sendPushForEvent(eventToken, notification) {
+    if (!pool || !webpush || !vapidPublicKey || !vapidPrivateKey || !notification) return;
+    const subscriptions = await pool.query('SELECT id, endpoint, p256dh, auth FROM push_subscriptions WHERE event_token = $1', [eventToken]);
+    const payload = JSON.stringify({
+      title: notification.title || 'Novedad en OrganizaT',
+      body: notification.detail || 'Tienes una novedad en tu evento.',
+      url: `/join/${eventToken}`
+    });
+    await Promise.all(subscriptions.rows.map(async subscription => {
+      try {
+        await webpush.sendNotification({ endpoint: subscription.endpoint, keys: { p256dh: subscription.p256dh, auth: subscription.auth } }, payload);
+      } catch (error) {
+        if (error.statusCode === 404 || error.statusCode === 410) {
+          await pool.query('DELETE FROM push_subscriptions WHERE id = $1', [subscription.id]);
+        } else {
+          console.error('No se pudo enviar una notificación push.', error.message);
+        }
+      }
+    }));
+  }
+
   async function handleApi(request, response, url) {
+    if (request.method === 'GET' && url.pathname === '/api/push/public-key') {
+      sendJson(response, 200, { enabled: Boolean(webpush && vapidPublicKey && vapidPrivateKey), publicKey: vapidPublicKey || null });
+      return;
+    }
+
     if (request.method === 'GET' && url.pathname === '/api/health') {
       if (!pool) {
         sendJson(response, 200, { ok: true, database: 'json', authentication: false });
@@ -854,39 +908,71 @@ function eventForAuthenticatedUser(record, request, user) {
             unreadNotifications: visibleNotifications.unreadNotifications
           };
         }
+        let pushNotification = null;
         if (communityMatch[2] === 'chat') {
           const text = cleanText(body && body.text, 'El mensaje', 500);
           const authorId = viewer.organizer ? `organizer:${record.ownerToken}` : viewer.attendee.id;
           const authorName = viewer.organizer ? (record.attendees[0]?.name || 'Organizador') : viewer.attendee.name;
           const message = { id: crypto.randomUUID(), authorId, authorName, text, createdAt: new Date().toISOString() };
           record.chatMessages = normalizeChatMessages([...(record.chatMessages || []), message]).slice(-1000);
-          record.notifications = [...(record.notifications || []), {
+          pushNotification = {
             id: crypto.randomUUID(), audience: 'all', title: 'Nuevo mensaje en el chat',
             detail: `${authorName} ha escrito en el chat del evento.`, createdAt: new Date().toISOString(), readBy: []
-          }].slice(-50);
+          };
+          record.notifications = [...(record.notifications || []), pushNotification].slice(-50);
         } else {
           if (!body || typeof body.data !== 'string') throw new HttpError(400, 'Selecciona una imagen.');
           const authorId = viewer.organizer ? `organizer:${record.ownerToken}` : viewer.attendee.id;
           const authorName = viewer.organizer ? (record.attendees[0]?.name || 'Organizador') : viewer.attendee.name;
           const photo = { id: crypto.randomUUID(), authorId, authorName, name: body.name || 'Foto del evento', data: body.data, createdAt: new Date().toISOString() };
           record.photos = normalizePhotos([...(record.photos || []), photo]).slice(-200);
-          record.notifications = [...(record.notifications || []), {
+          pushNotification = {
             id: crypto.randomUUID(), audience: 'all', title: 'Nueva foto del evento',
             detail: `${authorName} ha compartido una foto con el grupo.`, createdAt: new Date().toISOString(), readBy: []
-          }].slice(-50);
+          };
+          record.notifications = [...(record.notifications || []), pushNotification].slice(-50);
         }
         const updatedNotifications = publicInvitation(record, request);
         return {
           chatMessages: record.chatMessages || [],
           photos: record.photos || [],
           notifications: updatedNotifications.notifications,
-          unreadNotifications: updatedNotifications.unreadNotifications
+          unreadNotifications: updatedNotifications.unreadNotifications,
+          pushNotification
         };
       };
       const result = request.method === 'POST'
         ? await mutateStore(communityOperation)
         : communityOperation();
-      sendJson(response, request.method === 'POST' ? 201 : 200, result);
+      const { pushNotification, ...publicResult } = result;
+      sendJson(response, request.method === 'POST' ? 201 : 200, publicResult);
+      return;
+    }
+
+    const pushSubscriptionMatch = url.pathname.match(/^\/api\/invitations\/([A-Za-z0-9_-]{32})\/push-subscriptions$/);
+    if (pushSubscriptionMatch && ['POST', 'DELETE'].includes(request.method)) {
+      if (!pool || !webpush || !vapidPublicKey || !vapidPrivateKey) throw new HttpError(503, 'Las notificaciones push aún no están configuradas en el servidor.');
+      const record = records.find(item => item.token === pushSubscriptionMatch[1]);
+      if (!record) throw new HttpError(404, 'La invitación no existe o ha caducado.');
+      const viewer = getCommunityViewer(record, request);
+      const viewerKey = notificationViewerKey(record, request, viewer.attendee);
+      if (request.method === 'DELETE') {
+        await pool.query('DELETE FROM push_subscriptions WHERE event_token = $1 AND viewer_key = $2', [record.token, viewerKey]);
+        sendJson(response, 200, { enabled: false });
+        return;
+      }
+      const body = await readJsonBody(request);
+      const endpoint = cleanText(body && body.endpoint, 'El endpoint de notificaciones', 2000);
+      const keys = body && body.keys;
+      if (!endpoint.startsWith('https://') || !keys || typeof keys.p256dh !== 'string' || typeof keys.auth !== 'string') {
+        throw new HttpError(400, 'La suscripción de notificaciones no es válida.');
+      }
+      await pool.query(`
+        INSERT INTO push_subscriptions (id, event_token, viewer_key, endpoint, p256dh, auth, created_at)
+        VALUES ($1, $2, $3, $4, $5, $6, NOW())
+        ON CONFLICT (event_token, viewer_key, endpoint) DO UPDATE SET p256dh = EXCLUDED.p256dh, auth = EXCLUDED.auth
+      `, [crypto.randomUUID(), record.token, viewerKey, endpoint, keys.p256dh, keys.auth]);
+      sendJson(response, 201, { enabled: true });
       return;
     }
 
