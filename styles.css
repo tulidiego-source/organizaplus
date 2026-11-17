@@ -258,6 +258,10 @@ h1 { margin-bottom: 6px; color: #263a30; font-size: clamp(24px, 2.4vw, 31px); fo
 .notification-entry { display: flex; width: 100%; align-items: center; gap: 12px; padding: 16px 18px; border: 0; border-bottom: 1px solid #f0f1ed; background: white; text-align: left; }
 .notification-entry:last-child { border-bottom: 0; }
 .notification-entry:hover { background: #fafcf8; }
+.notification-entry.unread { border-left: 4px solid #e88a4b; background: #fff7ed; }
+.notification-entry.unread:hover { background: #fff1df; }
+.notification-entry.unread .notification-entry-icon { background: #ffe4c5; color: #b76625; }
+.notification-entry.unread .notification-entry-copy strong { color: #754a28; }
 .notification-entry-icon { display: grid; flex: 0 0 auto; place-items: center; width: 34px; height: 34px; border-radius: 9px; background: #edf5eb; color: var(--green); font-size: 15px; }
 .notification-entry-copy { display: grid; min-width: 0; gap: 4px; }
 .notification-entry-copy strong { color: #4a594f; font-size: 11px; }

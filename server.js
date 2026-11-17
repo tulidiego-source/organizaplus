@@ -335,6 +335,7 @@ function createEventRecord(body, ownerUserId = null) {
   if (!attendees.length || attendeeHeadcount(attendees) > capacity) {
     throw new HttpError(400, 'El número inicial de asistentes supera el aforo.');
   }
+  if (ownerUserId) attendees[0].accountUserId = ownerUserId;
   const time = source.time === undefined ? '14:00' : source.time;
   if (!isValidTime(time)) throw new HttpError(400, 'La hora del evento no es válida.');
   const event = {
@@ -898,7 +899,8 @@ function eventForAuthenticatedUser(record, request, user) {
         if (!record) throw new HttpError(404, 'La invitación no existe o ha caducado.');
         const attendee = record.attendees.find(person => person.id === attendeeDeleteMatch[2]);
         const isLinkedAccount = authenticatedUser && attendee
-          && attendee.accountUserId === authenticatedUser.id;
+          && (attendee.accountUserId === authenticatedUser.id
+            || (record.ownerUserId === authenticatedUser.id && attendee.id === record.attendees[0]?.id));
         if (!attendee || (attendee.privateToken !== request.headers['x-attendee-token'] && !isLinkedAccount)) {
           throw new HttpError(403, 'Solo puedes modificar tu propia asistencia.');
         }

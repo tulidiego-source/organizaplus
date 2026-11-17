@@ -1245,29 +1245,31 @@ function renderNotifications() {
   }
 
   eventNotifications.slice().reverse().forEach(notification => {
+    const isUnread = !viewerKey || !Array.isArray(notification.readBy) || !notification.readBy.includes(viewerKey);
     notifications.push({
       icon: '!',
       title: notification.title || 'Evento actualizado',
       detail: notification.detail || 'Hay cambios nuevos en este evento.',
-      tab: 'overview'
+      tab: 'overview',
+      unread: isUnread
     });
   });
 
   if (pendingAttendees) {
-    notifications.push({ icon: '♙', title: `${pendingAttendees} persona${pendingAttendees === 1 ? '' : 's'} por confirmar`, detail: `Revisa quién falta por responder en «${currentEvent.name}».`, tab: 'attendees' });
+    notifications.push({ icon: '♙', title: `${pendingAttendees} persona${pendingAttendees === 1 ? '' : 's'} por confirmar`, detail: `Revisa quién falta por responder en «${currentEvent.name}».`, tab: 'attendees', unread: true });
   }
   if (unassignedTasks) {
-    notifications.push({ icon: '☷', title: `${unassignedTasks} tarea${unassignedTasks === 1 ? '' : 's'} sin responsable`, detail: 'Asigna lo que falta para que el grupo pueda organizarse.', tab: 'tasks' });
+    notifications.push({ icon: '☷', title: `${unassignedTasks} tarea${unassignedTasks === 1 ? '' : 's'} sin responsable`, detail: 'Asigna lo que falta para que el grupo pueda organizarse.', tab: 'tasks', unread: true });
   }
   if (currentEvent.inviteToken) {
-    notifications.push({ icon: '↗', title: 'Invitación activa', detail: 'Las nuevas confirmaciones se sincronizan automáticamente.', tab: 'attendees' });
+    notifications.push({ icon: '↗', title: 'Invitación activa', detail: 'Las nuevas confirmaciones se sincronizan automáticamente.', tab: 'attendees', unread: false });
   }
   if (!notifications.length) {
-    notifications.push({ icon: '✓', title: 'Todo al día', detail: 'No hay avisos pendientes en este momento.', tab: 'overview' });
+    notifications.push({ icon: '✓', title: 'Todo al día', detail: 'No hay avisos pendientes en este momento.', tab: 'overview', unread: false });
   }
 
   $('#notifications-list').innerHTML = notifications.map(notification => `
-    <button class="notification-entry" data-notification-tab="${notification.tab}">
+    <button class="notification-entry ${notification.unread ? 'unread' : ''}" data-notification-tab="${notification.tab}">
       <span class="notification-entry-icon">${notification.icon}</span>
       <span class="notification-entry-copy"><strong>${escapeHtml(notification.title)}</strong><small>${escapeHtml(notification.detail)}</small></span>
       <span class="notification-entry-arrow">→</span>
