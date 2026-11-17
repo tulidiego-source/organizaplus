@@ -396,6 +396,12 @@ function restoreEventData(eventId) {
   selectedDate = state.selectedDate;
   currentVote = state.currentVote;
   eventNotifications = cloneData(state.notifications || []);
+  for (const tab of ['attendees', 'tasks']) {
+    const key = `${eventId}:${tab}`;
+    if (!Object.prototype.hasOwnProperty.call(sectionSeenItems, key)) {
+      sectionSeenItems[key] = new Set(sectionPendingItems(tab));
+    }
+  }
 }
 
 function loadPersistedData() {
