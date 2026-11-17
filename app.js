@@ -48,6 +48,10 @@ let communityMessages = [];
 let eventPhotos = [];
 let communityLoading = false;
 let communityLoadedToken = '';
+const notificationReadInProgress = new Set();
+let notificationAudioContext = null;
+let notificationSoundEventId = '';
+let knownNotificationIds = new Set();
 let serviceWorkerRegistration = null;
 let deferredInstallPrompt = null;
 
@@ -227,6 +231,65 @@ function showToast(message) {
   toast.classList.add('show');
   window.clearTimeout(toastTimer);
   toastTimer = window.setTimeout(() => toast.classList.remove('show'), 2600);
+}
+
+function primeNotificationAudio() {
+  if (!('AudioContext' in window || 'webkitAudioContext' in window)) return;
+  const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+  notificationAudioContext ||= new AudioContextClass();
+  if (notificationAudioContext.state === 'suspended') notificationAudioContext.resume().catch(() => {});
+}
+
+function playNotificationSound(notification) {
+  const text = `${notification.title || ''} ${notification.detail || ''}`.toLocaleLowerCase('es-ES');
+  if (text.includes('gasto') || text.includes('ticket') || text.includes('compra') || text.includes('pan')) return;
+  try {
+    primeNotificationAudio();
+    const context = notificationAudioContext;
+    if (!context || context.state === 'suspended') return;
+    const important = text.includes('recordatorio') || text.includes('empieza') || text.includes('pronto') || text.includes('evento actualizado');
+    const start = context.currentTime;
+    const master = context.createGain();
+    master.gain.setValueAtTime(0.0001, start);
+    master.gain.exponentialRampToValueAtTime(important ? 0.13 : 0.085, start + 0.025);
+    master.gain.exponentialRampToValueAtTime(0.0001, start + (important ? 0.64 : 0.5));
+    master.connect(context.destination);
+
+    const pop = context.createOscillator();
+    const popGain = context.createGain();
+    pop.type = 'sine';
+    pop.frequency.setValueAtTime(190, start);
+    pop.frequency.exponentialRampToValueAtTime(105, start + 0.13);
+    popGain.gain.setValueAtTime(0.55, start);
+    popGain.gain.exponentialRampToValueAtTime(0.0001, start + 0.18);
+    pop.connect(popGain).connect(master);
+    pop.start(start);
+    pop.stop(start + 0.19);
+
+    const clin = context.createOscillator();
+    clin.type = 'sine';
+    clin.frequency.setValueAtTime(740, start + 0.12);
+    clin.frequency.exponentialRampToValueAtTime(1080, start + 0.36);
+    clin.connect(master);
+    clin.start(start + 0.12);
+    clin.stop(start + (important ? 0.66 : 0.5));
+  } catch (error) {
+    console.debug('No se pudo reproducir el sonido de notificación.', error);
+  }
+}
+
+function announceNewNotifications(notifications, viewerKey) {
+  if (notificationSoundEventId !== currentEvent.id) {
+    notificationSoundEventId = currentEvent.id;
+    knownNotificationIds = new Set(notifications.map(notification => notification.id).filter(Boolean));
+    return;
+  }
+  notifications.forEach(notification => {
+    if (!notification.id || knownNotificationIds.has(notification.id)) return;
+    knownNotificationIds.add(notification.id);
+    const unread = !viewerKey || !Array.isArray(notification.readBy) || !notification.readBy.includes(viewerKey);
+    if (unread) playNotificationSound(notification);
+  });
 }
 
 function validDate(value) {
@@ -1128,7 +1191,24 @@ function capitalize(value) {
   return value.charAt(0).toUpperCase() + value.slice(1);
 }
 
-function setTab(tab) {
+function highlightSection(tab) {
+  const sectionSelectors = {
+    attendees: '#attendees-view',
+    tasks: '#tasks-view',
+    expenses: '#expenses-view',
+    chat: '#chat-view',
+    photos: '#photos-view',
+    overview: '.event-hero'
+  };
+  const section = sectionSelectors[tab] ? $(sectionSelectors[tab]) : null;
+  if (!section) return;
+  section.classList.remove('section-new-highlight');
+  void section.offsetWidth;
+  section.classList.add('section-new-highlight');
+  window.setTimeout(() => section.classList.remove('section-new-highlight'), 4200);
+}
+
+function setTab(tab, options = {}) {
   const validTabs = ['events', 'overview', 'attendees', 'tasks', 'expenses', 'chat', 'photos', 'inbox'];
   currentTab = validTabs.includes(tab) ? tab : 'overview';
   const hasEvent = currentEvent && currentEvent.id !== 'empty-workspace';
@@ -1156,6 +1236,7 @@ function setTab(tab) {
   $('#inbox-view').classList.toggle('hidden', currentTab !== 'inbox');
   $$('.sidebar .nav-link[data-tab]').forEach(button => button.classList.toggle('active', button.dataset.tab === currentTab));
   if (['chat', 'photos'].includes(currentTab)) loadCommunity();
+  if (options.highlight) highlightSection(currentTab);
   if (currentTab === 'inbox' && currentEvent.inviteToken) {
     const viewerKey = currentEvent.ownerToken
       ? `organizer:${currentEvent.ownerToken}`
@@ -1279,6 +1360,7 @@ function renderNotifications() {
     ? `organizer:${currentEvent.ownerToken}`
     : (currentViewerAttendeeId ? `attendee:${currentViewerAttendeeId}` : '');
   const unreadCount = eventNotifications.filter(notification => !viewerKey || !Array.isArray(notification.readBy) || !notification.readBy.includes(viewerKey)).length;
+  announceNewNotifications(eventNotifications, viewerKey);
   const notificationTab = notification => {
     const text = `${notification.title || ''} ${notification.detail || ''}`.toLocaleLowerCase('es-ES');
     if (text.includes('chat') || text.includes('mensaje')) return 'chat';
@@ -1308,6 +1390,7 @@ function renderNotifications() {
     const isUnread = !viewerKey || !Array.isArray(notification.readBy) || !notification.readBy.includes(viewerKey);
     notifications.push({
       icon: '!',
+      id: notification.id || '',
       title: notification.title || 'Evento actualizado',
       detail: notification.detail || 'Hay cambios nuevos en este evento.',
        tab: notificationTab(notification),
@@ -1329,13 +1412,46 @@ function renderNotifications() {
   }
 
   $('#notifications-list').innerHTML = notifications.map(notification => `
-    <button class="notification-entry ${notification.unread ? 'unread' : ''}" data-notification-tab="${notification.tab}">
+    <button class="notification-entry ${notification.unread ? 'unread' : ''}" data-notification-id="${escapeHtml(notification.id || '')}" data-notification-tab="${notification.tab}">
       <span class="notification-entry-icon">${notification.icon}</span>
       <span class="notification-entry-copy"><strong>${escapeHtml(notification.title)}</strong><small>${escapeHtml(notification.detail)}</small></span>
       <span class="notification-entry-arrow">→</span>
     </button>
   `).join('');
-  $$('#notifications-list [data-notification-tab]').forEach(button => button.addEventListener('click', () => setTab(button.dataset.notificationTab)));
+  const markIds = ids => markNotificationIdsRead(ids);
+  if ('IntersectionObserver' in window) {
+    const observer = new IntersectionObserver(entries => {
+      const visibleIds = entries
+        .filter(entry => entry.isIntersecting && entry.intersectionRatio >= .55)
+        .map(entry => entry.target.dataset.notificationId)
+        .filter(id => id && !notificationReadInProgress.has(id));
+      if (visibleIds.length) {
+        visibleIds.forEach(id => notificationReadInProgress.add(id));
+        markIds(visibleIds);
+      }
+    }, { threshold: .55 });
+    $$('#notifications-list .notification-entry.unread[data-notification-id]').forEach(button => observer.observe(button));
+  }
+  $$('#notifications-list [data-notification-tab]').forEach(button => button.addEventListener('click', () => {
+    if (button.dataset.notificationId) markIds([button.dataset.notificationId]);
+    setTab(button.dataset.notificationTab, { highlight: true });
+  }));
+}
+
+async function markNotificationIdsRead(ids) {
+  if (!currentEvent.inviteToken || !ids.length) return;
+  try {
+    const result = await requestApi(`/api/invitations/${encodeURIComponent(currentEvent.inviteToken)}/notifications/read`, {
+      method: 'PATCH',
+      headers: communityHeaders(),
+      body: JSON.stringify({ notificationIds: ids })
+    });
+    eventNotifications = result.notifications || eventNotifications;
+    renderNotifications();
+  } catch (error) {
+    ids.forEach(id => notificationReadInProgress.delete(id));
+    console.warn('No se pudo marcar la notificación como vista.', error);
+  }
 }
 
 async function markNotificationsRead() {
@@ -2209,6 +2325,7 @@ function renderAll() {
 }
 
 document.body.classList.add('app-loading');
+document.addEventListener('pointerdown', primeNotificationAudio, { once: true });
 registerProgressiveApp();
 loadPersistedData();
 renderAll();

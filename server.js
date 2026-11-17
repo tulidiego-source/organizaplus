@@ -874,6 +874,12 @@ function eventForAuthenticatedUser(record, request, user) {
 
     const notificationReadMatch = url.pathname.match(/^\/api\/invitations\/([A-Za-z0-9_-]{32})\/notifications\/read$/);
     if (request.method === 'PATCH' && notificationReadMatch) {
+      const body = String(request.headers['content-type'] || '').toLowerCase().includes('application/json')
+        ? await readJsonBody(request)
+        : {};
+      const requestedIds = Array.isArray(body && body.notificationIds)
+        ? new Set(body.notificationIds.filter(id => typeof id === 'string').slice(0, 100))
+        : null;
       const result = await mutateStore(() => {
         const record = records.find(item => item.token === notificationReadMatch[1]);
         if (!record) throw new HttpError(404, 'La invitación no existe o ha caducado.');
@@ -883,7 +889,7 @@ function eventForAuthenticatedUser(record, request, user) {
           const visible = (notification.audience === 'all' && !notification.recipientId)
             || (viewer.organizer && notification.audience === 'organizer')
             || (viewer.attendee && notification.recipientId === viewer.attendee.id);
-          if (!visible) return notification;
+          if (!visible || (requestedIds && requestedIds.size > 0 && !requestedIds.has(notification.id))) return notification;
           return { ...notification, readBy: Array.from(new Set([...(notification.readBy || []), viewerKey])) };
         });
         return publicInvitation(record, request);
