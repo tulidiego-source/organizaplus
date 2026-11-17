@@ -1162,11 +1162,24 @@ function renderExpenses() {
 function renderDateOptions() {
   const container = $('#date-options');
   if (!container) return;
-  const uniqueDateOptions = Array.from(new Map((Array.isArray(dateOptions) ? dateOptions : []).map(option => [`${option.date}-${option.time}`, option])).values());
+  const uniqueDateOptions = Array.from(new Map((Array.isArray(dateOptions) ? dateOptions : []).map(option => [option.date, option])).values());
+  const hasDate = uniqueDateOptions.length > 0;
   const hasVotingOptions = uniqueDateOptions.length > 1;
-  $('.date-panel').classList.toggle('hidden', !hasVotingOptions || currentTab !== 'overview');
-  if (!hasVotingOptions) {
+  $('.date-panel').classList.toggle('hidden', !hasDate || currentTab !== 'overview');
+  $('.date-panel .vote-tag').classList.toggle('hidden', !hasVotingOptions);
+  $('.date-panel .panel-subtitle').classList.toggle('hidden', !hasVotingOptions);
+  $('.date-panel .vote-footer').classList.toggle('hidden', !hasVotingOptions);
+  if (!hasDate) {
     container.innerHTML = '';
+    return;
+  }
+  if (!hasVotingOptions) {
+    const option = uniqueDateOptions[0];
+    container.innerHTML = `
+      <div class="single-date-confirmed">
+        <span class="date-label"><strong>${formatDateLong(option.date)}</strong><small>${escapeHtml(option.time)}</small></span>
+        <span class="single-date-badge">Fecha confirmada</span>
+      </div>`;
     return;
   }
   const maxVotes = Math.max(1, ...uniqueDateOptions.map(option => option.votes));
@@ -2013,7 +2026,8 @@ function validateWizardStep() {
       showToast('No repitas la misma fecha y hora.');
       return false;
     }
-    if (!$('#wizard-vote-choice input:checked')) {
+    const uniqueDates = new Set(wizardDates.map(option => option.date));
+    if (uniqueDates.size > 1 && !$('#wizard-vote-choice input:checked')) {
       showToast('Elige la fecha que prefieres para registrar tu voto.');
       return false;
     }
@@ -2097,7 +2111,7 @@ function renderWizardDates() {
 function renderWizardVoteChoices() {
   const choices = $('#wizard-vote-choice');
   if (!choices) return;
-  const uniqueDates = Array.from(new Map(wizardDates.map(option => [`${option.date}-${option.time}`, option])).values());
+  const uniqueDates = Array.from(new Map(wizardDates.map(option => [option.date, option])).values());
   choices.classList.toggle('hidden', uniqueDates.length < 2);
   const selectedDate = choices.querySelector('input:checked')?.value || (uniqueDates[0] ? `${uniqueDates[0].date}-${uniqueDates[0].time}` : '');
   choices.innerHTML = uniqueDates.length < 2 ? '' : uniqueDates.map(option => {
@@ -2215,8 +2229,9 @@ async function completeEventWizard() {
     }
     return;
   }
-  const chosenVote = $('#wizard-vote-choice input:checked')?.value || (wizardDates.length === 1 ? `${wizardDates[0].date}-${wizardDates[0].time}` : '');
-  const selectedOption = wizardDates.find(option => `${option.date}-${option.time}` === chosenVote);
+  const uniqueWizardDates = Array.from(new Map(wizardDates.map(option => [option.date, option])).values());
+  const chosenVote = $('#wizard-vote-choice input:checked')?.value || (uniqueWizardDates.length === 1 ? `${uniqueWizardDates[0].date}-${uniqueWizardDates[0].time}` : '');
+  const selectedOption = wizardDates.find(option => `${option.date}-${option.time}` === chosenVote) || (uniqueWizardDates.length === 1 ? uniqueWizardDates[0] : null);
   if (!selectedOption) {
     showToast('Selecciona una de las fechas propuestas.');
     return;
