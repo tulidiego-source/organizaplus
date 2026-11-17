@@ -1,4 +1,4 @@
-const CACHE_NAME = 'organizat-shell-v1';
+const CACHE_NAME = 'organizat-shell-v2';
 const SHELL = ['/', '/index.html', '/app.js', '/styles.css', '/manifest.webmanifest', '/icon.svg'];
 
 self.addEventListener('install', event => {
@@ -39,6 +39,9 @@ self.addEventListener('notificationclick', event => {
   const target = event.notification.data?.url || '/';
   event.waitUntil(self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(clients => {
     const existing = clients.find(client => 'focus' in client);
-    return existing ? existing.focus() : self.clients.openWindow(target);
+    if (existing) {
+      return existing.navigate(target).then(() => existing.focus());
+    }
+    return self.clients.openWindow(target);
   }));
 });

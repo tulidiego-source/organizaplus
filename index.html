@@ -235,6 +235,7 @@
       <input id="profile-name" name="name" maxlength="60" required>
       <label>Elige tu avatar</label>
       <div class="image-picker avatar-picker" id="avatar-picker" aria-label="Selecciona tu avatar"></div>
+      <label class="image-upload-button" for="avatar-image-upload">＋ Subir mi imagen</label><input id="avatar-image-upload" type="file" accept="image/jpeg,image/png,image/webp" hidden>
       <label for="profile-password">Nueva contraseña <span class="optional-label">Opcional</span></label>
       <input id="profile-password" name="password" type="password" minlength="8" autocomplete="new-password" placeholder="Déjala vacía para mantenerla">
       <p class="profile-feedback" id="profile-feedback" role="status" aria-live="polite"></p>
@@ -242,6 +243,18 @@
         <button class="secondary-button" id="logout-button" type="button">Cerrar sesión</button>
         <button class="primary-button" id="profile-submit" type="submit">Guardar cambios</button>
       </div>
+    </form>
+  </dialog>
+
+  <dialog class="app-modal crop-modal" id="image-crop-modal">
+    <form method="dialog" class="modal-form crop-form" id="image-crop-form">
+      <button class="modal-close" type="button" aria-label="Cerrar">×</button>
+      <span class="section-eyebrow">AJUSTA LA IMAGEN</span>
+      <h2 id="crop-title">Ajusta tu imagen</h2>
+      <p>Arrastra la imagen y usa el zoom hasta que encaje bien.</p>
+      <div class="crop-frame" id="crop-frame"><canvas id="crop-canvas" width="320" height="320"></canvas></div>
+      <label class="crop-zoom-label" for="crop-zoom">Zoom</label><input id="crop-zoom" type="range" min="1" max="3" step="0.01" value="1">
+      <div class="modal-actions"><button class="secondary-button" id="cancel-image-crop" type="button">Cancelar</button><button class="primary-button" id="confirm-image-crop" type="button">Usar imagen <span>✓</span></button></div>
     </form>
   </dialog>
 
@@ -324,6 +337,7 @@
         </div>
         <label>Imagen del evento</label>
         <div class="image-picker event-image-picker" id="event-image-picker" aria-label="Selecciona una imagen para el evento"></div>
+        <label class="image-upload-button" for="event-image-upload">＋ Subir una imagen propia</label><input id="event-image-upload" type="file" accept="image/jpeg,image/png,image/webp" hidden>
         <label for="event-description">Descripción <span class="optional-label">Opcional</span></label><textarea id="event-description" name="description" rows="2" maxlength="160" placeholder="¿Qué plan tienes en mente?"></textarea>
         <label for="event-location">Lugar o punto de encuentro</label><input id="event-location" name="location" placeholder="Ej. Casa de Juan" required maxlength="80">
         <label class="checkbox-label"><input id="event-allow-guests" name="allowGuests" type="checkbox" checked> Los invitados pueden traer acompañantes</label>

@@ -18,6 +18,9 @@ const eventImageCount = 9;
 const avatarImageCount = 12;
 let wizardImageIndex = 0;
 let selectedAvatarIndex = 0;
+let wizardEventImageData = '';
+let customAvatarImageData = '';
+const imageCropState = { kind: '', image: null, zoom: 1, offsetX: 0, offsetY: 0, dragging: false, startX: 0, startY: 0, startOffsetX: 0, startOffsetY: 0 };
 let dateOptions = [];
 let toastTimer;
 let selectedDate = '';
@@ -58,6 +61,7 @@ let serviceWorkerRegistration = null;
 let deferredInstallPrompt = null;
 let sectionSeenItems = {};
 let pendingNotificationHighlight = null;
+let pendingDeepLinkTab = '';
 
 function registerProgressiveApp() {
   if (!('serviceWorker' in navigator)) return;
@@ -202,10 +206,15 @@ function spriteStyle(image, index, columns, rows) {
   return `background-image:url('${image}');background-size:${columns * 100}% ${rows * 100}%;background-position:${x}% ${y}%;`;
 }
 
+function customImageStyle(data) {
+  return data ? `background-image:url('${data}');background-size:cover;background-position:center;` : '';
+}
+
 function renderEventImagePicker() {
   const picker = $('#event-image-picker');
   if (!picker) return;
-  picker.innerHTML = Array.from({ length: eventImageCount }, (_, index) => `
+  const customChoice = wizardEventImageData ? `<button type="button" class="image-choice custom-image-choice ${wizardImageIndex === -1 ? 'selected' : ''}" data-event-custom="true" style="${customImageStyle(wizardEventImageData)}" aria-label="Imagen propia del evento"><span>✓</span></button>` : '';
+  picker.innerHTML = customChoice + Array.from({ length: eventImageCount }, (_, index) => `
     <button type="button" class="image-choice ${index === wizardImageIndex ? 'selected' : ''}" data-event-image="${index}" style="${spriteStyle('/eventos.png', index, 3, 3)}" aria-label="Imagen de evento ${index + 1}"></button>
   `).join('');
 }
@@ -213,9 +222,66 @@ function renderEventImagePicker() {
 function renderAvatarPicker() {
   const picker = $('#avatar-picker');
   if (!picker) return;
-  picker.innerHTML = Array.from({ length: avatarImageCount }, (_, index) => `
+  const customChoice = customAvatarImageData ? `<button type="button" class="image-choice custom-image-choice avatar-custom-choice ${selectedAvatarIndex === -1 ? 'selected' : ''}" data-avatar-custom="true" style="${customImageStyle(customAvatarImageData)}" aria-label="Avatar propio"><span>✓</span></button>` : '';
+  picker.innerHTML = customChoice + Array.from({ length: avatarImageCount }, (_, index) => `
     <button type="button" class="image-choice ${index === selectedAvatarIndex ? 'selected' : ''}" data-avatar-index="${index}" style="${spriteStyle('/avatars.png', index, 4, 3)}" aria-label="Avatar ${index + 1}"></button>
   `).join('');
+}
+
+function drawCropPreview() {
+  const canvas = $('#crop-canvas');
+  const image = imageCropState.image;
+  if (!canvas || !image) return;
+  const context = canvas.getContext('2d');
+  const size = canvas.width;
+  const scale = Math.max(size / image.width, size / image.height) * imageCropState.zoom;
+  const width = image.width * scale;
+  const height = image.height * scale;
+  const maxX = Math.max(0, (width - size) / 2);
+  const maxY = Math.max(0, (height - size) / 2);
+  imageCropState.offsetX = Math.max(-maxX, Math.min(maxX, imageCropState.offsetX));
+  imageCropState.offsetY = Math.max(-maxY, Math.min(maxY, imageCropState.offsetY));
+  context.clearRect(0, 0, size, size);
+  context.fillStyle = '#eef4ec';
+  context.fillRect(0, 0, size, size);
+  context.drawImage(image, (size - width) / 2 + imageCropState.offsetX, (size - height) / 2 + imageCropState.offsetY, width, height);
+}
+
+function openImageCrop(file, kind) {
+  const reader = new FileReader();
+  reader.onload = () => {
+    const image = new Image();
+    image.onload = () => {
+      imageCropState.kind = kind;
+      imageCropState.image = image;
+      imageCropState.zoom = 1;
+      imageCropState.offsetX = 0;
+      imageCropState.offsetY = 0;
+      $('#crop-title').textContent = kind === 'avatar' ? 'Ajusta tu avatar' : 'Ajusta la imagen del evento';
+      $('#crop-zoom').value = '1';
+      $('#crop-frame').classList.toggle('crop-circle', kind === 'avatar');
+      drawCropPreview();
+      openDialog('#image-crop-modal');
+    };
+    image.src = reader.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+function confirmImageCrop() {
+  const canvas = $('#crop-canvas');
+  if (!canvas || !imageCropState.image) return;
+  const data = canvas.toDataURL('image/jpeg', .86);
+  if (imageCropState.kind === 'avatar') {
+    customAvatarImageData = data;
+    selectedAvatarIndex = -1;
+    renderAvatarPicker();
+  } else {
+    wizardEventImageData = data;
+    wizardImageIndex = -1;
+    renderEventImagePicker();
+  }
+  $('#image-crop-modal').close();
 }
 
 function attendeePeopleCount(person) {
@@ -530,8 +596,9 @@ function updateProfileUi() {
   if (profileName) profileName.textContent = authUser.name;
   if (profileRole) profileRole.textContent = authUser.email || 'Organizador';
   if (profileAvatar) {
+    const customAvatar = typeof authUser.avatar === 'string' && authUser.avatar.startsWith('data:image/') ? authUser.avatar : '';
     const avatarIndex = Number.isInteger(Number(authUser.avatar)) ? Number(authUser.avatar) : 0;
-    profileAvatar.style = spriteStyle('/avatars.png', avatarIndex, 4, 3);
+    profileAvatar.style = customAvatar ? customImageStyle(customAvatar) : spriteStyle('/avatars.png', avatarIndex, 4, 3);
     profileAvatar.textContent = '';
   }
 }
@@ -540,7 +607,8 @@ function openProfile() {
   if (!authUser) return;
   $('#profile-name').value = authUser.name;
   $('#profile-password').value = '';
-  selectedAvatarIndex = Number.isInteger(Number(authUser.avatar)) ? Number(authUser.avatar) : 0;
+  customAvatarImageData = typeof authUser.avatar === 'string' && authUser.avatar.startsWith('data:image/') ? authUser.avatar : '';
+  selectedAvatarIndex = customAvatarImageData ? -1 : (Number.isInteger(Number(authUser.avatar)) ? Number(authUser.avatar) : 0);
   $('#profile-feedback').textContent = '';
   renderAvatarPicker();
   openDialog('#profile-modal');
@@ -609,7 +677,8 @@ function maybeSkipJoinConfirmation() {
   if (!alreadyConfirmed) return;
   joinAlreadyHandledToken = activeInviteToken;
   $('#join-modal').close();
-  setTab('overview');
+  setTab(pendingDeepLinkTab || 'overview');
+  pendingDeepLinkTab = '';
   showToast(`Ya estás unido a «${currentEvent.name}».`);
 }
 
@@ -709,6 +778,8 @@ function startEventEdit() {
   $('#event-location').value = currentEvent.location || '';
   $('#event-allow-guests').checked = currentEvent.allowGuests !== false;
   wizardImageIndex = Number.isInteger(currentEvent.imageIndex) ? currentEvent.imageIndex : 0;
+  wizardEventImageData = currentEvent.imageData || '';
+  if (wizardEventImageData) wizardImageIndex = -1;
   wizardStep = 0;
   wizardInvitees = [];
   wizardDates = [{ date: currentEvent.date, time: currentEvent.time || '14:00' }];
@@ -1178,9 +1249,15 @@ function renderCurrentEvent() {
       heroImage.classList.remove('event-image-selected');
     } else {
       const imageIndex = Number.isInteger(currentEvent.imageIndex) ? currentEvent.imageIndex : 0;
-      heroImage.style.backgroundImage = "url('/eventos.png')";
-      heroImage.style.backgroundSize = '300% 300%';
-      heroImage.style.backgroundPosition = `${(imageIndex % 3) * 50}% ${Math.floor(imageIndex / 3) * 50}%`;
+      if (currentEvent.imageData) {
+        heroImage.style.backgroundImage = `url('${currentEvent.imageData}')`;
+        heroImage.style.backgroundSize = 'cover';
+        heroImage.style.backgroundPosition = 'center';
+      } else {
+        heroImage.style.backgroundImage = "url('/eventos.png')";
+        heroImage.style.backgroundSize = '300% 300%';
+        heroImage.style.backgroundPosition = `${(imageIndex % 3) * 50}% ${Math.floor(imageIndex / 3) * 50}%`;
+      }
       heroImage.classList.add('event-image-selected');
     }
   }
@@ -1735,6 +1812,18 @@ $('#join-guest-button').addEventListener('click', () => {
 $('#profile-button').addEventListener('click', openProfile);
 $('#enable-push-button').addEventListener('click', enablePushNotifications);
 
+$('#event-image-upload').addEventListener('change', event => {
+  const file = event.target.files[0];
+  event.target.value = '';
+  if (file) openImageCrop(file, 'event');
+});
+
+$('#avatar-image-upload').addEventListener('change', event => {
+  const file = event.target.files[0];
+  event.target.value = '';
+  if (file) openImageCrop(file, 'avatar');
+});
+
 window.addEventListener('beforeinstallprompt', event => {
   event.preventDefault();
   deferredInstallPrompt = event;
@@ -1753,11 +1842,53 @@ $('#install-app-button').addEventListener('click', async () => {
 });
 
 $('#avatar-picker').addEventListener('click', event => {
+  if (event.target.closest('[data-avatar-custom]')) {
+    selectedAvatarIndex = -1;
+    renderAvatarPicker();
+    return;
+  }
   const choice = event.target.closest('[data-avatar-index]');
   if (!choice) return;
   selectedAvatarIndex = Number(choice.dataset.avatarIndex);
   renderAvatarPicker();
 });
+
+$('#event-image-picker').addEventListener('click', event => {
+  if (event.target.closest('[data-event-custom]')) {
+    wizardImageIndex = -1;
+    renderEventImagePicker();
+    return;
+  }
+  const choice = event.target.closest('[data-event-image]');
+  if (!choice) return;
+  wizardImageIndex = Number(choice.dataset.eventImage);
+  wizardEventImageData = '';
+  renderEventImagePicker();
+});
+
+$('#crop-zoom').addEventListener('input', event => {
+  imageCropState.zoom = Number(event.target.value);
+  drawCropPreview();
+});
+
+$('#crop-frame').addEventListener('pointerdown', event => {
+  imageCropState.dragging = true;
+  imageCropState.startX = event.clientX;
+  imageCropState.startY = event.clientY;
+  imageCropState.startOffsetX = imageCropState.offsetX;
+  imageCropState.startOffsetY = imageCropState.offsetY;
+  event.currentTarget.setPointerCapture(event.pointerId);
+});
+$('#crop-frame').addEventListener('pointermove', event => {
+  if (!imageCropState.dragging) return;
+  imageCropState.offsetX = imageCropState.startOffsetX + event.clientX - imageCropState.startX;
+  imageCropState.offsetY = imageCropState.startOffsetY + event.clientY - imageCropState.startY;
+  drawCropPreview();
+});
+$('#crop-frame').addEventListener('pointerup', () => { imageCropState.dragging = false; });
+$('#crop-frame').addEventListener('pointercancel', () => { imageCropState.dragging = false; });
+$('#cancel-image-crop').addEventListener('click', () => $('#image-crop-modal').close());
+$('#confirm-image-crop').addEventListener('click', confirmImageCrop);
 
 $('#profile-form').addEventListener('submit', async event => {
   event.preventDefault();
@@ -1768,7 +1899,7 @@ $('#profile-form').addEventListener('submit', async event => {
   try {
     const result = await requestApi('/api/auth/profile', {
       method: 'PATCH',
-      body: JSON.stringify({ name: form.get('name'), password: form.get('password'), avatar: String(selectedAvatarIndex) })
+      body: JSON.stringify({ name: form.get('name'), password: form.get('password'), avatar: customAvatarImageData && selectedAvatarIndex === -1 ? customAvatarImageData : String(Math.max(0, selectedAvatarIndex)) })
     });
     authUser = result.user;
     updateProfileUi();
@@ -1806,6 +1937,7 @@ function startEventWizard() {
   $('#event-form').reset();
   wizardStep = 0;
   wizardImageIndex = 0;
+  wizardEventImageData = '';
   renderEventImagePicker();
   wizardInvitees = [];
   wizardDates = [
@@ -1933,12 +2065,6 @@ function addWizardInvites() {
 }
 
 $('#add-wizard-invite').addEventListener('click', addWizardInvites);
-$('#event-image-picker').addEventListener('click', event => {
-  const choice = event.target.closest('[data-event-image]');
-  if (!choice) return;
-  wizardImageIndex = Number(choice.dataset.eventImage);
-  renderEventImagePicker();
-});
 $('#invite-emails').addEventListener('keydown', event => {
   if (event.key === 'Enter') {
     event.preventDefault();
@@ -2050,7 +2176,8 @@ async function completeEventWizard() {
       description: String(form.get('description') || '').trim(),
       capacity: Number(form.get('guests')) || 20,
       allowGuests: form.get('allowGuests') === 'on',
-      imageIndex: wizardImageIndex
+      imageIndex: wizardImageIndex < 0 ? 0 : wizardImageIndex,
+      imageData: wizardEventImageData
     };
     const finishButton = $('#wizard-finish');
     finishButton.disabled = true;
@@ -2318,6 +2445,8 @@ async function loadInvitationFromLink() {
   if (!routeMatch) return;
 
   activeInviteToken = routeMatch[1];
+  const requestedTab = new URLSearchParams(window.location.search).get('tab');
+  pendingDeepLinkTab = ['overview', 'attendees', 'tasks', 'expenses', 'chat', 'photos'].includes(requestedTab) ? requestedTab : '';
   joinAlreadyHandledToken = '';
   $('#join-feedback').textContent = 'Cargando los detalles del evento…';
   openDialog('#join-modal');
@@ -2410,7 +2539,8 @@ $('#join-form').addEventListener('submit', async event => {
     renderAll();
     persistAppState();
     $('#join-modal').close();
-    setTab('overview');
+    setTab(pendingDeepLinkTab || 'overview');
+    pendingDeepLinkTab = '';
     showToast(`¡Listo, ${name}! Ya apareces en la lista de asistentes.`);
   } catch (error) {
     console.error('Unable to add the invited guest.', error);

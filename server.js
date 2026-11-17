@@ -61,6 +61,14 @@ function cleanText(value, field, maximumLength, required = true) {
   return cleaned;
 }
 
+function normalizeImageData(value, field) {
+  if (value === undefined || value === '') return '';
+  if (typeof value !== 'string' || value.length > 700000 || !/^data:image\/(?:jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/.test(value)) {
+    throw new HttpError(400, `${field} no es válida.`);
+  }
+  return value;
+}
+
 function normalizeAttendees(input) {
   if (!Array.isArray(input) || input.length > 200) {
     throw new HttpError(400, 'La lista de asistentes no es válida.');
@@ -352,7 +360,8 @@ function createEventRecord(body, ownerUserId = null) {
     badge: cleanText(source.badge || 'Evento privado', 'La etiqueta', 40, false) || 'Evento privado',
     capacity,
     allowGuests: source.allowGuests === true,
-    imageIndex: Number.isInteger(source.imageIndex) && source.imageIndex >= 0 && source.imageIndex < 9 ? source.imageIndex : 0
+    imageIndex: Number.isInteger(source.imageIndex) && source.imageIndex >= 0 && source.imageIndex < 9 ? source.imageIndex : 0,
+    imageData: normalizeImageData(source.imageData, 'La imagen del evento')
   };
   return {
     id: crypto.randomBytes(16).toString('hex'),
@@ -649,7 +658,7 @@ function eventForAuthenticatedUser(record, request, user) {
     const payload = JSON.stringify({
       title: notification.title || 'Novedad en OrganizaT',
       body: notification.detail || 'Tienes una novedad en tu evento.',
-      url: `/join/${eventToken}`
+      url: `/join/${eventToken}?tab=${encodeURIComponent(notification.targetType === 'attendee' ? 'attendees' : notification.targetType === 'task' ? 'tasks' : notification.targetType === 'chat' ? 'chat' : notification.targetType === 'photo' ? 'photos' : notification.targetType === 'expense' ? 'expenses' : 'overview')}`
     });
     await Promise.all(subscriptions.rows.map(async subscription => {
       try {
@@ -733,7 +742,7 @@ function eventForAuthenticatedUser(record, request, user) {
       const body = await readJsonBody(request);
       const name = body && body.name !== undefined ? cleanText(body.name, 'El nombre', 60) : user.name;
       const avatar = body && body.avatar !== undefined ? String(body.avatar) : (user.avatar || '0');
-      if (!/^([0-9]|1[01])$/.test(avatar)) throw new HttpError(400, 'El avatar seleccionado no es válido.');
+      if (!/^([0-9]|1[01])$/.test(avatar)) normalizeImageData(avatar, 'El avatar seleccionado');
       const password = body && body.password ? validatePassword(body.password) : null;
       const passwordHash = password ? await hashPassword(password) : null;
       const result = await pool.query(
@@ -822,7 +831,8 @@ function eventForAuthenticatedUser(record, request, user) {
           description: cleanText(source.description || '', 'La descripción', 160, false),
           capacity: Number(source.capacity),
           allowGuests: source.allowGuests === true,
-          imageIndex: Number.isInteger(source.imageIndex) && source.imageIndex >= 0 && source.imageIndex < 9 ? source.imageIndex : 0
+          imageIndex: Number.isInteger(source.imageIndex) && source.imageIndex >= 0 && source.imageIndex < 9 ? source.imageIndex : 0,
+          imageData: normalizeImageData(source.imageData, 'La imagen del evento')
         };
         if (!Number.isInteger(nextEvent.capacity) || nextEvent.capacity < attendeeHeadcount(record.attendees) || nextEvent.capacity > 200) {
           throw new HttpError(400, 'El aforo no puede ser menor que los asistentes actuales y debe estar entre 2 y 200.');
@@ -922,7 +932,7 @@ function eventForAuthenticatedUser(record, request, user) {
           const message = { id: crypto.randomUUID(), authorId, authorName, text, createdAt: new Date().toISOString() };
           record.chatMessages = normalizeChatMessages([...(record.chatMessages || []), message]).slice(-1000);
           pushNotification = {
-            id: crypto.randomUUID(), audience: 'all', title: 'Nuevo mensaje en el chat',
+            id: crypto.randomUUID(), audience: 'all', targetId: message.id, targetType: 'chat', title: 'Nuevo mensaje en el chat',
             detail: `${authorName} ha escrito en el chat del evento.`, createdAt: new Date().toISOString(), readBy: []
           };
           record.notifications = [...(record.notifications || []), pushNotification].slice(-50);
@@ -933,7 +943,7 @@ function eventForAuthenticatedUser(record, request, user) {
           const photo = { id: crypto.randomUUID(), authorId, authorName, name: body.name || 'Foto del evento', data: body.data, createdAt: new Date().toISOString() };
           record.photos = normalizePhotos([...(record.photos || []), photo]).slice(-200);
           pushNotification = {
-            id: crypto.randomUUID(), audience: 'all', title: 'Nueva foto del evento',
+            id: crypto.randomUUID(), audience: 'all', targetId: photo.id, targetType: 'photo', title: 'Nueva foto del evento',
             detail: `${authorName} ha compartido una foto con el grupo.`, createdAt: new Date().toISOString(), readBy: []
           };
           record.notifications = [...(record.notifications || []), pushNotification].slice(-50);
