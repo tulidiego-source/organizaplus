@@ -1285,6 +1285,24 @@ function renderNotifications() {
     ? `organizer:${currentEvent.ownerToken}`
     : (currentViewerAttendeeId ? `attendee:${currentViewerAttendeeId}` : '');
   const unreadCount = eventNotifications.filter(notification => !viewerKey || !Array.isArray(notification.readBy) || !notification.readBy.includes(viewerKey)).length;
+  const notificationTab = notification => {
+    const text = `${notification.title || ''} ${notification.detail || ''}`.toLocaleLowerCase('es-ES');
+    if (text.includes('chat') || text.includes('mensaje')) return 'chat';
+    if (text.includes('foto') || text.includes('álbum')) return 'photos';
+    if (text.includes('asist') || text.includes('unido') || text.includes('confirm') || text.includes('cancel')) return 'attendees';
+    if (text.includes('tarea') || text.includes('llevar') || text.includes('propuesta') || text.includes('comprad')) return 'tasks';
+    if (text.includes('ticket') || text.includes('gasto') || text.includes('pag')) return 'expenses';
+    return 'overview';
+  };
+  const unreadTabs = new Set();
+  eventNotifications.forEach(notification => {
+    const isUnread = !viewerKey || !Array.isArray(notification.readBy) || !notification.readBy.includes(viewerKey);
+    if (isUnread) unreadTabs.add(notificationTab(notification));
+  });
+  if (pendingAttendees) unreadTabs.add('attendees');
+  if (unassignedTasks) unreadTabs.add('tasks');
+  $('[data-inbox-dot]')?.classList.toggle('visible', unreadCount > 0 || pendingAttendees > 0 || unassignedTasks > 0);
+  $$('[data-section-dot]').forEach(dot => dot.classList.toggle('visible', unreadTabs.has(dot.dataset.sectionDot)));
   const pendingBanner = $('#notification-pending-banner');
   const pendingText = $('#notification-pending-text');
   if (pendingBanner && pendingText) {
@@ -1298,7 +1316,7 @@ function renderNotifications() {
       icon: '!',
       title: notification.title || 'Evento actualizado',
       detail: notification.detail || 'Hay cambios nuevos en este evento.',
-      tab: 'overview',
+       tab: notificationTab(notification),
       unread: isUnread
     });
   });

@@ -34,6 +34,9 @@ button { color: inherit; cursor: pointer; }
 .nav-count { margin-left: auto; min-width: 22px; padding: 3px 6px; border-radius: 12px; background: #f1f3ef; color: #66746b; text-align: center; font-size: 10px; font-weight: 700; }
 .active .nav-count { background: #dcebdd; color: var(--green); }
 .notification-dot { width: 7px; height: 7px; margin-left: auto; border: 1px solid white; border-radius: 50%; background: #ec8955; }
+.notification-dot, .section-notification-dot { display: none; }
+.notification-dot.visible, .section-notification-dot.visible { display: inline-block; }
+.section-notification-dot { width: 7px; height: 7px; margin-left: auto; border: 1px solid white; border-radius: 50%; background: #ec8955; }
 .notification-pending { display: flex; align-items: center; gap: 10px; margin: 15px 0 10px; padding: 12px 14px; border: 1px solid #f1d8b1; border-radius: 9px; background: #fff8ed; color: #7b5a2d; }
 .notification-pending > span { font-size: 18px; }
 .notification-pending strong { flex: 1; font-size: 12px; }
