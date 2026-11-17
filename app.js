@@ -1253,12 +1253,16 @@ function unreadSectionNotifications(tab) {
 function viewSectionChanges(tab) {
   if (!['attendees', 'tasks'].includes(tab)) return;
   const unread = unreadSectionNotifications(tab);
-  unread.forEach(notification => highlightNotificationTarget(notification, tab));
+  if (unread.length) {
+    window.requestAnimationFrame(() => {
+      unread.forEach((notification, index) => highlightNotificationTarget(notification, tab, { scroll: index === unread.length - 1 }));
+    });
+  }
   const ids = unread.map(notification => notification.id).filter(Boolean);
   if (ids.length) queueNotificationRead(ids);
 }
 
-function highlightNotificationTarget(notification, tab) {
+function highlightNotificationTarget(notification, tab, options = {}) {
   if (!notification) return;
   const text = `${notification.title || ''} ${notification.detail || ''}`.toLocaleLowerCase('es-ES');
   let elements = [];
@@ -1293,7 +1297,7 @@ function highlightNotificationTarget(notification, tab) {
     element.classList.add('item-new-highlight');
     window.setTimeout(() => element.classList.remove('item-new-highlight'), 4200);
   });
-  elements[0].scrollIntoView({ behavior: 'smooth', block: 'center' });
+  if (options.scroll !== false) elements[0].scrollIntoView({ behavior: 'smooth', block: 'center' });
 }
 
 function setTab(tab, options = {}) {
