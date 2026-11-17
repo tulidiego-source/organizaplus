@@ -1162,21 +1162,22 @@ function renderExpenses() {
 function renderDateOptions() {
   const container = $('#date-options');
   if (!container) return;
-  const hasVotingOptions = Array.isArray(dateOptions) && dateOptions.length > 1;
+  const uniqueDateOptions = Array.from(new Map((Array.isArray(dateOptions) ? dateOptions : []).map(option => [`${option.date}-${option.time}`, option])).values());
+  const hasVotingOptions = uniqueDateOptions.length > 1;
   $('.date-panel').classList.toggle('hidden', !hasVotingOptions || currentTab !== 'overview');
   if (!hasVotingOptions) {
     container.innerHTML = '';
     return;
   }
-  const maxVotes = Math.max(1, ...dateOptions.map(option => option.votes));
-  container.innerHTML = dateOptions.map(option => `
+  const maxVotes = Math.max(1, ...uniqueDateOptions.map(option => option.votes));
+  container.innerHTML = uniqueDateOptions.map(option => `
     <button class="date-option ${selectedDate === option.date ? 'selected' : ''}" data-date="${option.date}" type="button">
       <span class="date-label"><strong>${formatDateLong(option.date)}</strong><small>${escapeHtml(option.time)}</small></span>
       <span class="vote-count">${option.votes} ${option.votes === 1 ? 'voto' : 'votos'}</span>
       <span class="vote-bar"><i style="width:${Math.max(14, (option.votes / maxVotes) * 100)}%"></i></span>
     </button>
   `).join('');
-  const totalVotes = dateOptions.reduce((sum, option) => sum + option.votes, 0);
+  const totalVotes = uniqueDateOptions.reduce((sum, option) => sum + option.votes, 0);
   $('#vote-message').textContent = currentVote ? `Tu voto: ${formatDateLong(currentVote)}` : `${totalVotes} votos registrados`;
   $('#add-vote-button').textContent = currentVote && selectedDate === currentVote ? 'Votado ✓' : 'Votar →';
 }
@@ -2096,8 +2097,10 @@ function renderWizardDates() {
 function renderWizardVoteChoices() {
   const choices = $('#wizard-vote-choice');
   if (!choices) return;
-  const selectedDate = choices.querySelector('input:checked')?.value || (wizardDates[0] ? `${wizardDates[0].date}-${wizardDates[0].time}` : '');
-  choices.innerHTML = wizardDates.map(option => {
+  const uniqueDates = Array.from(new Map(wizardDates.map(option => [`${option.date}-${option.time}`, option])).values());
+  choices.classList.toggle('hidden', uniqueDates.length < 2);
+  const selectedDate = choices.querySelector('input:checked')?.value || (uniqueDates[0] ? `${uniqueDates[0].date}-${uniqueDates[0].time}` : '');
+  choices.innerHTML = uniqueDates.length < 2 ? '' : uniqueDates.map(option => {
     const value = `${option.date}-${option.time}`;
     return `<label class="wizard-vote-option"><input type="radio" name="organizer-vote" value="${escapeHtml(value)}" ${value === selectedDate ? 'checked' : ''}><span>${formatDateLong(option.date)} · ${escapeHtml(option.time)}</span></label>`;
   }).join('');
@@ -2212,7 +2215,7 @@ async function completeEventWizard() {
     }
     return;
   }
-  const chosenVote = $('#wizard-vote-choice input:checked').value;
+  const chosenVote = $('#wizard-vote-choice input:checked')?.value || (wizardDates.length === 1 ? `${wizardDates[0].date}-${wizardDates[0].time}` : '');
   const selectedOption = wizardDates.find(option => `${option.date}-${option.time}` === chosenVote);
   if (!selectedOption) {
     showToast('Selecciona una de las fechas propuestas.');
@@ -2256,7 +2259,8 @@ async function completeEventWizard() {
     badge: 'Nuevo evento',
     capacity,
     allowGuests: form.get('allowGuests') === 'on',
-    imageIndex: wizardImageIndex,
+    imageIndex: wizardImageIndex < 0 ? 0 : wizardImageIndex,
+    imageData: wizardEventImageData,
     invitees: wizardInvitees.slice()
   };
   saveCurrentEventData();
