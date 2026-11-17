@@ -49,6 +49,8 @@ let eventPhotos = [];
 let communityLoading = false;
 let communityLoadedToken = '';
 const notificationReadInProgress = new Set();
+const pendingNotificationReadIds = new Set();
+let notificationReadTimer = null;
 let notificationAudioContext = null;
 let notificationSoundEventId = '';
 let knownNotificationIds = new Set();
@@ -770,6 +772,7 @@ async function refreshRemoteAttendees(showError = false) {
     const headers = currentEvent.ownerToken
       ? { 'X-Organizer-Token': currentEvent.ownerToken }
       : (joinedInvitationTokens[currentEvent.inviteToken] ? { 'X-Attendee-Token': joinedInvitationTokens[currentEvent.inviteToken] } : {});
+    const previousSnapshot = JSON.stringify({ event: currentEvent, attendees, tasks, dateOptions, expenses, notifications: eventNotifications });
     const invitation = await requestApi(`/api/invitations/${encodeURIComponent(currentEvent.inviteToken)}`, { headers });
     currentEvent = { ...currentEvent, ...(invitation.event || {}) };
     eventTemplates = eventTemplates.map(event => event.id === currentEvent.id ? currentEvent : event);
@@ -781,9 +784,12 @@ async function refreshRemoteAttendees(showError = false) {
     if (JSON.stringify(attendees) !== JSON.stringify(refreshedAttendees)) {
       attendees = refreshedAttendees;
     }
-    saveCurrentEventData();
-    renderAll();
-    persistAppState();
+    const nextSnapshot = JSON.stringify({ event: currentEvent, attendees, tasks, dateOptions, expenses, notifications: eventNotifications });
+    if (previousSnapshot !== nextSnapshot) {
+      saveCurrentEventData();
+      renderAll();
+      persistAppState();
+    }
     updateInviteSyncStatus('Confirmaciones sincronizadas.');
   } catch (error) {
     console.error('Unable to refresh remote event attendees.', error);
@@ -1333,12 +1339,13 @@ async function loadCommunity(force = false) {
   if (!currentEvent.ownerToken && (!viewer || !['Confirmado', 'Confirmada'].includes(viewer.status))) return;
   communityLoading = true;
   try {
-    const result = await requestApi(`/api/invitations/${encodeURIComponent(currentEvent.inviteToken)}/chat`, { headers: communityHeaders() });
+    const [result, photosResult] = await Promise.all([
+      requestApi(`/api/invitations/${encodeURIComponent(currentEvent.inviteToken)}/chat`, { headers: communityHeaders() }),
+      requestApi(`/api/invitations/${encodeURIComponent(currentEvent.inviteToken)}/photos`, { headers: communityHeaders() })
+    ]);
     communityMessages = result.chatMessages || [];
-    eventNotifications = result.notifications || eventNotifications;
-    const photosResult = await requestApi(`/api/invitations/${encodeURIComponent(currentEvent.inviteToken)}/photos`, { headers: communityHeaders() });
     eventPhotos = photosResult.photos || [];
-    eventNotifications = photosResult.notifications || eventNotifications;
+    eventNotifications = photosResult.notifications || result.notifications || eventNotifications;
     communityLoadedToken = currentEvent.inviteToken;
     renderCommunity();
     renderNotifications();
@@ -1468,7 +1475,7 @@ function renderNotifications() {
       <span class="notification-entry-arrow">→</span>
     </button>
   `).join('');
-  const markIds = ids => markNotificationIdsRead(ids);
+  const markIds = ids => queueNotificationRead(ids);
   if ('IntersectionObserver' in window) {
     const observer = new IntersectionObserver(entries => {
       const visibleIds = entries
@@ -1487,6 +1494,16 @@ function renderNotifications() {
     if (button.dataset.notificationId) markIds([button.dataset.notificationId]);
     setTab(button.dataset.notificationTab, { highlight: true, notification: selected });
   }));
+}
+
+function queueNotificationRead(ids) {
+  ids.forEach(id => pendingNotificationReadIds.add(id));
+  window.clearTimeout(notificationReadTimer);
+  notificationReadTimer = window.setTimeout(() => {
+    const queuedIds = Array.from(pendingNotificationReadIds);
+    pendingNotificationReadIds.clear();
+    markNotificationIdsRead(queuedIds);
+  }, 350);
 }
 
 async function markNotificationIdsRead(ids) {
@@ -2384,7 +2401,13 @@ loadPersistedData();
 renderAll();
 bootstrapAuth();
 loadInvitationFromLink();
-window.setInterval(() => {
+const remoteRefreshIntervalMs = 5000;
+const refreshVisibleRemoteData = () => {
+  if (document.hidden) return;
   if (currentEvent.inviteToken) refreshRemoteAttendees();
   if (['chat', 'photos'].includes(currentTab)) loadCommunity(true);
-}, 15000);
+};
+window.setInterval(refreshVisibleRemoteData, remoteRefreshIntervalMs);
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden) refreshVisibleRemoteData();
+});
