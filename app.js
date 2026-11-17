@@ -54,6 +54,8 @@ let notificationSoundEventId = '';
 let knownNotificationIds = new Set();
 let serviceWorkerRegistration = null;
 let deferredInstallPrompt = null;
+let sectionSeenItems = {};
+let pendingNotificationHighlight = null;
 
 function registerProgressiveApp() {
   if (!('serviceWorker' in navigator)) return;
@@ -872,7 +874,7 @@ function renderTaskRow(task, index, interactive = false) {
   const purchasedControl = interactive && canMarkPurchased
     ? `<button class="task-purchased ${purchased ? 'done' : ''}" data-task-purchased="${escapeHtml(task.id || '')}" type="button" aria-label="${purchased ? 'Marcar compra pendiente' : 'Marcar como comprado'}">${purchased ? '✓' : '€'}</button>`
     : `<span class="task-purchased task-purchased-static ${purchased ? 'done' : ''}" aria-label="${purchased ? 'Comprado' : 'Pendiente de compra'}">${purchased ? '✓' : '€'}</span>`;
-  return `<div class="task-row">
+  return `<div class="task-row" data-task-id="${escapeHtml(task.id || '')}">
     ${claimControl}
     <span class="task-main"><strong>${escapeHtml(task.name)}</strong><small>${escapeHtml(task.quantity || 'Cantidad por definir')}</small></span>
     <span class="task-owner">${assignmentControl || owner}${proposalAction}${purchasedControl}</span>
@@ -986,7 +988,7 @@ function renderAttendees() {
     `<div class="person-chip"><span class="avatar" style="background:${person.color}">${person.initial}</span><span>${escapeHtml(person.name.split(' ')[0])}</span></div>`
   ).join('');
   $('#attendee-list').innerHTML = attendees.map((person, index) => `
-    <div class="attendee-list-row">
+    <div class="attendee-list-row" data-attendee-id="${escapeHtml(person.id || '')}">
       <span class="avatar" style="background:${person.color}">${person.initial}</span>
       <span class="attendee-list-name"><strong>${escapeHtml(person.name)}</strong><small>${escapeHtml(person.role)} · ${escapeHtml(attendeePartyLabel(person))}</small></span>
        <span class="attendance-status ${person.status === 'Pendiente' || person.status === 'Cancelado' ? 'pending' : ''}">${person.status === 'Pendiente' ? 'Por confirmar' : person.status}</span>
@@ -1044,7 +1046,7 @@ function renderExpenses() {
   $('#ticket-count').textContent = expenses.length;
   $('#split-count').textContent = confirmed;
   $('#expense-list').innerHTML = expenses.map(expense => `
-    <div class="expense-entry">
+    <div class="expense-entry" data-expense-id="${escapeHtml(expense.id || '')}">
       <span class="expense-symbol">↗</span>
       <span class="expense-entry-copy"><strong>${escapeHtml(expense.name)}</strong><small>Pagado por ${escapeHtml(expense.person)} · ${escapeHtml(expense.date)}</small></span>
       <span class="expense-entry-amount">${euro(expense.amount)}</span>
@@ -1191,21 +1193,62 @@ function capitalize(value) {
   return value.charAt(0).toUpperCase() + value.slice(1);
 }
 
-function highlightSection(tab) {
-  const sectionSelectors = {
-    attendees: '#attendees-view',
-    tasks: '#tasks-view',
-    expenses: '#expenses-view',
-    chat: '#chat-view',
-    photos: '#photos-view',
-    overview: '.event-hero'
-  };
-  const section = sectionSelectors[tab] ? $(sectionSelectors[tab]) : null;
-  if (!section) return;
-  section.classList.remove('section-new-highlight');
-  void section.offsetWidth;
-  section.classList.add('section-new-highlight');
-  window.setTimeout(() => section.classList.remove('section-new-highlight'), 4200);
+function sectionPendingItems(tab) {
+  if (tab === 'attendees') return attendees.filter(person => person.status === 'Pendiente').map(person => person.id);
+  if (tab === 'tasks') return tasks.filter(task => !task.person).map(task => task.id);
+  return [];
+}
+
+function sectionSeenKey(tab) {
+  return `${currentEvent.id}:${tab}`;
+}
+
+function markSectionViewed(tab) {
+  if (!['attendees', 'tasks'].includes(tab)) return;
+  sectionSeenItems[sectionSeenKey(tab)] = new Set(sectionPendingItems(tab));
+}
+
+function sectionHasUnseen(tab) {
+  const seen = sectionSeenItems[sectionSeenKey(tab)] || new Set();
+  return sectionPendingItems(tab).some(id => !seen.has(id));
+}
+
+function highlightNotificationTarget(notification, tab) {
+  if (!notification) return;
+  const text = `${notification.title || ''} ${notification.detail || ''}`.toLocaleLowerCase('es-ES');
+  let elements = [];
+  if (tab === 'attendees') {
+    const person = notification.targetId
+      ? attendees.find(item => item.id === notification.targetId)
+      : attendees.find(item => text.includes(item.name.toLocaleLowerCase('es-ES')));
+    if (person) elements = $$(`[data-attendee-id="${String(person.id).replace(/(["\\])/g, '\\$1')}"]`);
+  } else if (tab === 'tasks') {
+    const task = notification.targetId
+      ? tasks.find(item => item.id === notification.targetId)
+      : tasks.find(item => text.includes(item.name.toLocaleLowerCase('es-ES')));
+    if (task) elements = $$(`[data-task-id="${String(task.id).replace(/(["\\])/g, '\\$1')}"]`);
+  } else if (tab === 'expenses') {
+    const expense = expenses.find(item => text.includes(item.name.toLocaleLowerCase('es-ES')));
+    if (expense) elements = $$(`[data-expense-id="${String(expense.id).replace(/(["\\])/g, '\\$1')}"]`);
+  } else if (tab === 'chat') {
+    const message = communityMessages.slice().reverse().find(item => text.includes(item.authorName.toLocaleLowerCase('es-ES')));
+    if (message) elements = $$(`[data-message-id="${String(message.id).replace(/(["\\])/g, '\\$1')}"]`);
+  } else if (tab === 'photos') {
+    const photo = eventPhotos.slice().reverse().find(item => text.includes(item.authorName.toLocaleLowerCase('es-ES')));
+    if (photo) elements = $$(`[data-photo-id="${String(photo.id).replace(/(["\\])/g, '\\$1')}"]`);
+  }
+  if (!elements.length) {
+    if (['chat', 'photos'].includes(tab)) pendingNotificationHighlight = notification;
+    return;
+  }
+  pendingNotificationHighlight = null;
+  elements.forEach(element => {
+    element.classList.remove('item-new-highlight');
+    void element.offsetWidth;
+    element.classList.add('item-new-highlight');
+    window.setTimeout(() => element.classList.remove('item-new-highlight'), 4200);
+  });
+  elements[0].scrollIntoView({ behavior: 'smooth', block: 'center' });
 }
 
 function setTab(tab, options = {}) {
@@ -1236,7 +1279,11 @@ function setTab(tab, options = {}) {
   $('#inbox-view').classList.toggle('hidden', currentTab !== 'inbox');
   $$('.sidebar .nav-link[data-tab]').forEach(button => button.classList.toggle('active', button.dataset.tab === currentTab));
   if (['chat', 'photos'].includes(currentTab)) loadCommunity();
-  if (options.highlight) highlightSection(currentTab);
+  if (options.highlight) highlightNotificationTarget(options.notification, currentTab);
+  if (['attendees', 'tasks'].includes(currentTab)) {
+    markSectionViewed(currentTab);
+    renderNotifications();
+  }
   if (currentTab === 'inbox' && currentEvent.inviteToken) {
     const viewerKey = currentEvent.ownerToken
       ? `organizer:${currentEvent.ownerToken}`
@@ -1267,16 +1314,17 @@ function renderCommunity() {
   const chat = $('#chat-messages');
   if (chat) {
     chat.innerHTML = communityMessages.length
-      ? communityMessages.map(message => `<article class="chat-message"><div class="chat-message-heading"><strong>${escapeHtml(message.authorName)}</strong><small>${escapeHtml(new Date(message.createdAt).toLocaleString('es-ES', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }))}</small></div><p>${escapeHtml(message.text)}</p></article>`).join('')
+      ? communityMessages.map(message => `<article class="chat-message" data-message-id="${escapeHtml(message.id || '')}"><div class="chat-message-heading"><strong>${escapeHtml(message.authorName)}</strong><small>${escapeHtml(new Date(message.createdAt).toLocaleString('es-ES', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }))}</small></div><p>${escapeHtml(message.text)}</p></article>`).join('')
       : '<p class="empty-hint">Todavía no hay mensajes. ¡Saluda al grupo!</p>';
     chat.scrollTop = chat.scrollHeight;
   }
   const grid = $('#photo-grid');
   if (grid) {
     grid.innerHTML = eventPhotos.length
-      ? eventPhotos.slice().reverse().map(photo => `<figure class="event-photo"><img src="${photo.data}" alt="${escapeHtml(photo.name)}" loading="lazy"><figcaption>${escapeHtml(photo.authorName)} · ${escapeHtml(photo.name)}</figcaption></figure>`).join('')
+      ? eventPhotos.slice().reverse().map(photo => `<figure class="event-photo" data-photo-id="${escapeHtml(photo.id || '')}"><img src="${photo.data}" alt="${escapeHtml(photo.name)}" loading="lazy"><figcaption>${escapeHtml(photo.authorName)} · ${escapeHtml(photo.name)}</figcaption></figure>`).join('')
       : '<p class="empty-hint">Todavía no hay fotos. Comparte la primera del evento.</p>';
   }
+  if (pendingNotificationHighlight && ['chat', 'photos'].includes(currentTab)) highlightNotificationTarget(pendingNotificationHighlight, currentTab);
 }
 
 async function loadCommunity(force = false) {
@@ -1375,9 +1423,11 @@ function renderNotifications() {
     const isUnread = !viewerKey || !Array.isArray(notification.readBy) || !notification.readBy.includes(viewerKey);
     if (isUnread) unreadTabs.add(notificationTab(notification));
   });
-  if (pendingAttendees) unreadTabs.add('attendees');
-  if (unassignedTasks) unreadTabs.add('tasks');
-  $('[data-inbox-dot]')?.classList.toggle('visible', unreadCount > 0 || pendingAttendees > 0 || unassignedTasks > 0);
+  const pendingAttendeesUnread = sectionHasUnseen('attendees');
+  const unassignedTasksUnread = sectionHasUnseen('tasks');
+  if (pendingAttendeesUnread) unreadTabs.add('attendees');
+  if (unassignedTasksUnread) unreadTabs.add('tasks');
+  $('[data-inbox-dot]')?.classList.toggle('visible', unreadCount > 0 || pendingAttendeesUnread || unassignedTasksUnread);
   $$('[data-section-dot]').forEach(dot => dot.classList.toggle('visible', unreadTabs.has(dot.dataset.sectionDot)));
   const pendingBanner = $('#notification-pending-banner');
   const pendingText = $('#notification-pending-text');
@@ -1399,10 +1449,10 @@ function renderNotifications() {
   });
 
   if (pendingAttendees) {
-    notifications.push({ icon: '♙', title: `${pendingAttendees} persona${pendingAttendees === 1 ? '' : 's'} por confirmar`, detail: `Revisa quién falta por responder en «${currentEvent.name}».`, tab: 'attendees', unread: true });
+    notifications.push({ icon: '♙', title: `${pendingAttendees} persona${pendingAttendees === 1 ? '' : 's'} por confirmar`, detail: `Revisa quién falta por responder en «${currentEvent.name}».`, tab: 'attendees', unread: pendingAttendeesUnread });
   }
   if (unassignedTasks) {
-    notifications.push({ icon: '☷', title: `${unassignedTasks} tarea${unassignedTasks === 1 ? '' : 's'} sin responsable`, detail: 'Asigna lo que falta para que el grupo pueda organizarse.', tab: 'tasks', unread: true });
+    notifications.push({ icon: '☷', title: `${unassignedTasks} tarea${unassignedTasks === 1 ? '' : 's'} sin responsable`, detail: 'Asigna lo que falta para que el grupo pueda organizarse.', tab: 'tasks', unread: unassignedTasksUnread });
   }
   if (currentEvent.inviteToken) {
     notifications.push({ icon: '↗', title: 'Invitación activa', detail: 'Las nuevas confirmaciones se sincronizan automáticamente.', tab: 'attendees', unread: false });
@@ -1411,8 +1461,8 @@ function renderNotifications() {
     notifications.push({ icon: '✓', title: 'Todo al día', detail: 'No hay avisos pendientes en este momento.', tab: 'overview', unread: false });
   }
 
-  $('#notifications-list').innerHTML = notifications.map(notification => `
-    <button class="notification-entry ${notification.unread ? 'unread' : ''}" data-notification-id="${escapeHtml(notification.id || '')}" data-notification-tab="${notification.tab}">
+  $('#notifications-list').innerHTML = notifications.map((notification, index) => `
+    <button class="notification-entry ${notification.unread ? 'unread' : ''}" data-notification-index="${index}" data-notification-id="${escapeHtml(notification.id || '')}" data-notification-tab="${notification.tab}">
       <span class="notification-entry-icon">${notification.icon}</span>
       <span class="notification-entry-copy"><strong>${escapeHtml(notification.title)}</strong><small>${escapeHtml(notification.detail)}</small></span>
       <span class="notification-entry-arrow">→</span>
@@ -1433,8 +1483,9 @@ function renderNotifications() {
     $$('#notifications-list .notification-entry.unread[data-notification-id]').forEach(button => observer.observe(button));
   }
   $$('#notifications-list [data-notification-tab]').forEach(button => button.addEventListener('click', () => {
+    const selected = notifications[Number(button.dataset.notificationIndex)];
     if (button.dataset.notificationId) markIds([button.dataset.notificationId]);
-    setTab(button.dataset.notificationTab, { highlight: true });
+    setTab(button.dataset.notificationTab, { highlight: true, notification: selected });
   }));
 }
 
@@ -1459,6 +1510,8 @@ async function markNotificationsRead() {
   try {
     const result = await requestApi(`/api/invitations/${encodeURIComponent(currentEvent.inviteToken)}/notifications/read`, { method: 'PATCH', headers: communityHeaders() });
     eventNotifications = result.notifications || [];
+    markSectionViewed('attendees');
+    markSectionViewed('tasks');
     renderNotifications();
     showToast('Notificaciones marcadas como leídas.');
   } catch (error) { showToast(error.message); }

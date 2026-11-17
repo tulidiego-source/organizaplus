@@ -1009,13 +1009,15 @@ function eventForAuthenticatedUser(record, request, user) {
         record.notifications = [...(record.notifications || []), {
           id: crypto.randomUUID(),
           audience: 'organizer',
+          targetId: attendee.id,
+          targetType: 'attendee',
           title: status === 'Cancelado' ? `${attendee.name} ha cancelado su asistencia` : `${attendee.name} ha actualizado su asistencia`,
           detail: status === 'Cancelado' ? 'Ya no contará para el aforo.' : `${attendee.adults} adulto${attendee.adults === 1 ? '' : 's'} y ${attendee.children} niño${attendee.children === 1 ? '' : 's'}.`,
           createdAt: new Date().toISOString()
         }];
         if (previousStatus !== status) {
           record.notifications.push({
-            id: crypto.randomUUID(), recipientId: attendee.id, audience: 'all',
+            id: crypto.randomUUID(), recipientId: attendee.id, audience: 'all', targetId: attendee.id, targetType: 'attendee',
             title: status === 'Cancelado' ? 'Asistencia cancelada' : 'Asistencia confirmada',
             detail: status === 'Cancelado' ? `${attendee.name} ya no asistirá al evento.` : `${attendee.name} vuelve a estar en el plan.`,
             createdAt: new Date().toISOString()
@@ -1208,6 +1210,8 @@ function eventForAuthenticatedUser(record, request, user) {
         record.notifications = [...(record.notifications || []), {
           id: crypto.randomUUID(),
           audience: 'organizer',
+          targetId: existing ? existing.id : record.attendees.at(-1).id,
+          targetType: 'attendee',
           title: `${name} se ha unido al evento`,
           detail: `${name} ha confirmado ${partyAdults} adulto${partyAdults === 1 ? '' : 's'} y ${children} niño${children === 1 ? '' : 's'}.`,
           createdAt: new Date().toISOString()
