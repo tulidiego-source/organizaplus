@@ -448,6 +448,8 @@ h1 { margin-bottom: 6px; color: #263a30; font-size: clamp(24px, 2.4vw, 31px); fo
   .nav-icon { font-size: 18px; }
   .nav-count, .notification-dot { display: none; }
   .help-card, .profile-copy, .profile-more { display: none; }
+  .sidebar-create-button { width: 44px; height: 44px; margin-top: 20px; padding: 0; font-size: 0; }
+  .sidebar-create-button::before { content: '＋'; font-size: 23px; }
   .profile-button { justify-content: center; padding: 12px 0 0; }
   .profile-button .avatar { margin: 0; }
   .main-content { margin-left: 66px; }
@@ -469,6 +471,8 @@ h1 { margin-bottom: 6px; color: #263a30; font-size: clamp(24px, 2.4vw, 31px); fo
   .sidebar { position: fixed; inset: auto 0 0; z-index: 10; display: block; width: 100%; height: 70px; padding: 4px 5px; border-top: 1px solid #e5e9e2; border-right: 0; box-shadow: 0 -5px 18px rgba(37,53,46,.08); }
   .brand, .workspace-label, .help-card { display: none; }
   .sidebar-bottom { display: block; position: absolute; right: 6px; top: -58px; }
+  .sidebar-create-button { position: absolute; right: 12px; bottom: 78px; left: 12px; width: auto; height: 42px; margin: 0; padding: 8px 12px; font-size: 12px; box-shadow: 0 4px 14px rgba(37,53,46,.12); }
+  .sidebar-create-button::before { display: none; }
   .profile-button { display: flex; width: 48px; height: 48px; padding: 4px; border: 1px solid #e5e9e2; border-radius: 50%; background: #fff; box-shadow: 0 4px 14px rgba(37,53,46,.12); }
   .main-nav, .event-nav { position: absolute; bottom: 4px; display: flex; gap: 2px; width: auto; margin: 0; }
   .main-nav { left: 5px; width: 27%; }
