@@ -59,6 +59,8 @@ test('el check de compra permite desmarcar una compra ya hecha', () => {
 test('la lista de compras identifica y filtra las cosas del usuario', () => {
   assert.match(indexHtml, /id="task-filter" class="task-filter"/);
   assert.match(indexHtml, /value="mine">Mis cosas/);
+  assert.match(indexHtml, /value="unassigned">Sin asignar/);
+  assert.match(appJs, /taskFilter === 'unassigned'/);
   assert.match(appJs, /escapeHtml\(isMine \? 'Tú' : task\.person\)/);
   assert.match(appJs, /classList.*task-row-mine|task-row\$\{isMine \? ' task-row-mine'/s);
 });

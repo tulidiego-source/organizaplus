@@ -991,15 +991,20 @@ function renderTasks() {
   $('#task-preview').innerHTML = tasks.slice(0, 5).map((task, index) => renderTaskRow(task, index)).join('');
   const viewer = attendees.find(person => person.id === currentViewerAttendeeId);
   const viewerName = viewer?.name || (currentEvent.ownerToken ? attendees.find(person => person.role === 'Organizador')?.name : authUser?.name) || '';
-  const visibleTasks = taskFilter === 'mine' ? tasks.filter(task => task.person === viewerName) : tasks;
+  const visibleTasks = taskFilter === 'mine'
+    ? tasks.filter(task => task.person === viewerName)
+    : taskFilter === 'unassigned'
+      ? tasks.filter(task => !task.person)
+      : tasks;
+  const emptyFilterMessage = taskFilter === 'unassigned' ? 'No hay compras sin asignar.' : 'No tienes compras asignadas en este evento.';
   $('#task-board').innerHTML = visibleTasks.length
     ? visibleTasks.map((task, index) => renderTaskRow(task, index, true)).join('')
-    : '<p class="task-filter-empty">No tienes compras asignadas en este evento.</p>';
+    : `<p class="task-filter-empty">${emptyFilterMessage}</p>`;
   const taskFilterInput = $('#task-filter');
   if (taskFilterInput) {
     taskFilterInput.value = taskFilter;
     taskFilterInput.onchange = event => {
-      taskFilter = event.target.value === 'mine' ? 'mine' : 'all';
+      taskFilter = ['mine', 'unassigned'].includes(event.target.value) ? event.target.value : 'all';
       renderTasks();
     };
   }
