@@ -1551,7 +1551,7 @@ $('#photo-input').addEventListener('change', async event => {
 
 $$('[data-tab]').forEach(button => button.addEventListener('click', () => setTab(button.dataset.tab)));
 
-$('.notification-button').addEventListener('click', () => setTab('inbox'));
+$('.notification-button')?.addEventListener('click', () => setTab('inbox'));
 
 function renderNotifications() {
   const pendingAttendees = attendees.filter(person => person.status === 'Pendiente').length;
