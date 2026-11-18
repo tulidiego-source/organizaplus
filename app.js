@@ -973,11 +973,12 @@ function renderTaskRow(task, index, interactive = false) {
   const proposalAction = proposal && currentEvent.ownerToken ? `<button class="secondary-button task-accept-button" type="button" data-accept-task="${escapeHtml(task.id || '')}">Aceptar</button>` : (proposal ? '<small class="task-proposal-label">Propuesta pendiente</small>' : '');
   const assignmentControl = currentEvent.ownerToken && interactive && !proposal ? `<select class="task-assignee" data-task-assignee="${escapeHtml(task.id || '')}" aria-label="Asignar tarea"><option value="">Sin asignar</option>${attendees.filter(person => ['Confirmado', 'Confirmada'].includes(person.status)).map(person => `<option value="${escapeHtml(person.name)}" ${person.name === task.person ? 'selected' : ''}>${escapeHtml(person.name)}</option>`).join('')}</select>` : '';
   const claimControl = !currentEvent.ownerToken && !task.person
-    ? `<button class="task-check ${task.person ? 'done' : ''}" data-task-index="${index}" aria-label="Asignarme esta tarea" ${interactive ? '' : 'tabindex="-1"'}>＋</button>`
-    : `<span class="task-check task-check-static ${task.person ? 'done' : ''}" aria-hidden="true">${task.person ? '✓' : ''}</span>`;
+    ? `<button class="task-check task-claim" data-task-index="${index}" aria-label="Asignarme esta cosa" ${interactive ? '' : 'tabindex="-1"'}>＋</button>`
+    : '';
+  const purchaseMark = purchased ? '✓' : '□';
   const purchasedControl = interactive && canMarkPurchased
-    ? `<button class="task-purchased ${purchased ? 'done' : ''}" data-task-purchased="${escapeHtml(task.id || '')}" type="button" aria-label="${purchased ? 'Marcar compra pendiente' : 'Marcar como comprado'}">${purchased ? '✓' : '€'}</button>`
-    : `<span class="task-purchased task-purchased-static ${purchased ? 'done' : ''}" aria-label="${purchased ? 'Comprado' : 'Pendiente de compra'}">${purchased ? '✓' : '€'}</span>`;
+    ? `<button class="task-purchased ${purchased ? 'done' : ''}" data-task-purchased="${escapeHtml(task.id || '')}" type="button" aria-label="${purchased ? 'Marcar compra pendiente' : 'Marcar como comprado'}" title="${purchased ? 'Marcar compra pendiente' : 'Marcar como comprado'}">${purchaseMark}</button>`
+    : `<span class="task-purchased task-purchased-static ${purchased ? 'done' : ''}" aria-label="${purchased ? 'Comprado' : 'Pendiente de compra'}" title="${purchased ? 'Comprado' : 'Pendiente de compra'}">${purchaseMark}</span>`;
   return `<div class="task-row${isMine ? ' task-row-mine' : ''}" data-task-id="${escapeHtml(task.id || '')}">
     ${claimControl}
     <span class="task-main"><strong>${escapeHtml(task.name)}</strong><small>${escapeHtml(task.quantity || 'Cantidad por definir')}</small></span>

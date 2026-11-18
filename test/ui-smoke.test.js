@@ -52,6 +52,8 @@ test('el check de compra permite desmarcar una compra ya hecha', () => {
   assert.match(appJs, /if \(!\(task\.purchased === true \|\| task\.done === true\)\)/);
   assert.match(appJs, /body: JSON\.stringify\(\{ action: 'purchase' \}\)/);
   assert.match(appJs, /Marcar compra pendiente/);
+  assert.match(appJs, /const purchaseMark = purchased \? '✓' : '□'/);
+  assert.doesNotMatch(appJs, /task-purchased[^\n]*>€</);
 });
 
 test('la lista de compras identifica y filtra las cosas del usuario', () => {

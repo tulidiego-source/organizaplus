@@ -190,9 +190,10 @@ h1 { margin-bottom: 6px; color: #263a30; font-size: clamp(24px, 2.4vw, 31px); fo
 .task-check { display: grid; flex: 0 0 auto; place-items: center; width: 16px; height: 16px; border: 1px solid #d6ddd4; border-radius: 5px; background: white; color: white; font-size: 10px; }
 .task-check.done { border-color: #8db895; background: #8db895; }
 .task-check-static { color: #8db895; }
-.task-purchased { display: grid; flex: 0 0 auto; place-items: center; width: 22px; height: 22px; border: 1px solid #e3c47a; border-radius: 6px; background: #fffaf0; color: #c58b2e; font-size: 11px; font-weight: 700; }
+.task-purchased { display: grid; flex: 0 0 auto; place-items: center; width: 22px; height: 22px; border: 1px solid #cbd8ca; border-radius: 6px; background: #fff; color: #8c9a8e; font-size: 14px; font-weight: 700; line-height: 1; }
 .task-purchased.done { border-color: #8db895; background: #e8f2e9; color: var(--green); }
 .task-purchased-static { opacity: .72; }
+.task-purchased:not(.done):hover { border-color: #8db895; background: #f1f8ef; color: var(--green); }
 .task-main { display: grid; min-width: 0; gap: 3px; }
 .task-main strong { overflow: hidden; color: #4b594f; font-size: 10px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
 .task-main small { color: #9aa39b; font-size: 9px; }
