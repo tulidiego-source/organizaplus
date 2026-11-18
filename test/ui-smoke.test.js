@@ -14,6 +14,7 @@ test('la interfaz contiene los destinos de mapa y notificaciones', () => {
   assert.match(indexHtml, /id="inbox-view"/);
   assert.match(indexHtml, /id="notifications-list"/);
   assert.match(indexHtml, /aria-label="Notificaciones"/);
+  assert.match(indexHtml, /id="event-organizer"/);
 });
 
 test('el enlace de mapa se genera con una búsqueda segura', () => {

@@ -1264,6 +1264,9 @@ function renderCurrentEvent() {
   if (heroKicker) heroKicker.innerHTML = `<span class="kicker-dot"></span> ${escapeHtml(currentEvent.badge.toUpperCase())} <span class="kicker-separator">·</span> ${escapeHtml(currentEvent.type.toUpperCase())}`;
   const heroDescription = document.querySelector('.hero-description');
   if (heroDescription) heroDescription.textContent = currentEvent.description;
+  const organizer = attendees.find(person => person.role === 'Organizador') || attendees[0];
+  const organizerLabel = document.querySelector('#event-organizer');
+  if (organizerLabel) organizerLabel.textContent = `Organiza: ${organizer?.name || authUser?.name || 'Organizador'}`;
   const heroImage = document.querySelector('.hero-image');
   if (heroImage) {
     heroImage.setAttribute('aria-label', isEmptyWorkspace ? 'Ilustración de espacio vacío' : 'Ilustración del evento');
