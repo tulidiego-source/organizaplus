@@ -36,3 +36,9 @@ test('el mensaje de edición identifica al asistente seleccionado', () => {
   assert.match(appJs, /attendees\.find\(person => person\.id === editingAttendeeId\)/);
   assert.match(appJs, /const editingName = editingPerson\?\.name \|\| authUser\?\.name/);
 });
+
+test('crear evento solo se muestra en Mis eventos', () => {
+  assert.match(indexHtml, /class="sidebar-create-button hidden" id="create-event-button"/);
+  assert.match(appJs, /create-event-button.*currentTab !== 'events'/s);
+  assert.doesNotMatch(indexHtml, /empty-create-event-button/);
+});

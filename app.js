@@ -1269,8 +1269,6 @@ function renderCurrentEvent() {
   if (shareEventButton) shareEventButton.classList.toggle('hidden', !isOrganizer && currentEvent.allowGuestSharing !== true);
   const inviteButton = $('#invite-button');
   if (inviteButton) inviteButton.classList.toggle('hidden', !isOrganizer);
-  const emptyCreateButton = $('#empty-create-event-button');
-  if (emptyCreateButton) emptyCreateButton.classList.toggle('hidden', !isEmptyWorkspace);
   if (title) title.textContent = currentEvent.name;
   const heroTitle = document.querySelector('.event-hero h1');
   if (heroTitle) heroTitle.innerHTML = `${escapeHtml(currentEvent.name).replace(/ /g, '&nbsp;')}`;
@@ -1427,6 +1425,7 @@ function setTab(tab, options = {}) {
   const canAccessCommunity = Boolean(currentEvent?.ownerToken || (viewer && ['Confirmado', 'Confirmada'].includes(viewer.status)));
   if (!hasEvent && ['attendees', 'tasks', 'expenses', 'chat', 'photos'].includes(currentTab)) currentTab = 'overview';
   if (!canAccessCommunity && ['chat', 'photos'].includes(currentTab)) currentTab = 'overview';
+  $('#create-event-button')?.classList.toggle('hidden', currentTab !== 'events');
   $('.event-label').classList.toggle('hidden', !hasEvent);
   $('.event-nav').classList.toggle('hidden', !hasEvent);
   $$('.event-nav [data-tab="chat"], .event-nav [data-tab="photos"]').forEach(button => button.classList.toggle('hidden', !canAccessCommunity));
@@ -1787,7 +1786,6 @@ $('#open-task-modal-secondary').addEventListener('click', () => openDialog('#tas
 $('#open-expense-modal').addEventListener('click', () => openDialog('#expense-modal'));
 $('#invite-button').addEventListener('click', openInviteFlow);
 $('#create-event-button').addEventListener('click', startEventWizard);
-$('#empty-create-event-button').addEventListener('click', startEventWizard);
 $('#tutorial-button').addEventListener('click', () => openDialog('#tutorial-modal'));
 $('#tutorial-create-event').addEventListener('click', () => {
   $('#tutorial-modal').close();
