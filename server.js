@@ -360,6 +360,7 @@ function createEventRecord(body, ownerUserId = null) {
     badge: cleanText(source.badge || 'Evento privado', 'La etiqueta', 40, false) || 'Evento privado',
     capacity,
     allowGuests: source.allowGuests === true,
+    allowGuestSharing: source.allowGuestSharing === true,
     imageIndex: Number.isInteger(source.imageIndex) && source.imageIndex >= 0 && source.imageIndex < 9 ? source.imageIndex : 0,
     imageData: normalizeImageData(source.imageData, 'La imagen del evento')
   };
@@ -831,6 +832,7 @@ function eventForAuthenticatedUser(record, request, user) {
           description: cleanText(source.description || '', 'La descripción', 160, false),
           capacity: Number(source.capacity),
           allowGuests: source.allowGuests === true,
+          allowGuestSharing: source.allowGuestSharing === true,
           imageIndex: Number.isInteger(source.imageIndex) && source.imageIndex >= 0 && source.imageIndex < 9 ? source.imageIndex : 0,
           imageData: normalizeImageData(source.imageData, 'La imagen del evento')
         };
@@ -1012,6 +1014,11 @@ function eventForAuthenticatedUser(record, request, user) {
         if (!Number.isInteger(adults) || adults < 1 || adults > 50 || !Number.isInteger(children) || children < 0 || children > 50) {
           throw new HttpError(400, 'El número de asistentes no es válido.');
         }
+        const currentAdults = Math.max(1, Number(attendee.adults) || 1);
+        const currentChildren = Math.max(0, Number(attendee.children) || 0);
+        if (status !== 'Cancelado' && record.event.allowGuests !== true && (adults > currentAdults || children > currentChildren)) {
+          throw new HttpError(403, 'El organizador no permite añadir adultos o niños a este evento.');
+        }
         const previousStatus = attendee.status;
         attendee.status = status;
         attendee.adults = adults;
@@ -1190,6 +1197,9 @@ function eventForAuthenticatedUser(record, request, user) {
         const children = body && body.children === undefined ? 0 : Number(body && body.children);
         if (!Number.isInteger(additionalAdults) || additionalAdults < 0 || additionalAdults > 50 || !Number.isInteger(children) || children < 0 || children > 50) {
           throw new HttpError(400, 'El número de acompañantes no es válido.');
+        }
+        if (record.event.allowGuests !== true && (additionalAdults > 0 || children > 0)) {
+          throw new HttpError(403, 'El organizador no permite añadir adultos o niños a este evento.');
         }
         const partyAdults = 1 + additionalAdults;
         const partySize = partyAdults + children;

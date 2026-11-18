@@ -623,6 +623,7 @@ function updateJoinAuthenticationUi() {
   const nameInput = $('#join-name');
   const submitButton = $('#join-submit');
   if (!accountStatus || !loginButton || !guestButton || !guestFields || !partyFields || !nameInput) return;
+  const canAddParty = currentEvent.allowGuests !== false;
 
   if (editingOwnAttendance) {
     accountStatus.classList.toggle('hidden', !authUser);
@@ -630,7 +631,7 @@ function updateJoinAuthenticationUi() {
     loginButton.classList.add('hidden');
     guestButton.classList.add('hidden');
     guestFields.classList.remove('hidden');
-    partyFields.classList.remove('hidden');
+    partyFields.classList.toggle('hidden', !canAddParty);
     submitButton.classList.remove('hidden');
     submitButton.innerHTML = 'Guardar cambios <span>✓</span>';
     nameInput.readOnly = true;
@@ -644,7 +645,7 @@ function updateJoinAuthenticationUi() {
     loginButton.classList.add('hidden');
     guestButton.classList.add('hidden');
     guestFields.classList.add('hidden');
-    partyFields.classList.remove('hidden');
+    partyFields.classList.toggle('hidden', !canAddParty);
     submitButton.classList.remove('hidden');
     submitButton.innerHTML = 'Sí, me uno <span>✓</span>';
     nameInput.value = authUser.name;
@@ -777,6 +778,7 @@ function startEventEdit() {
   $('#event-description').value = currentEvent.description || '';
   $('#event-location').value = currentEvent.location || '';
   $('#event-allow-guests').checked = currentEvent.allowGuests !== false;
+  $('#event-allow-sharing').checked = currentEvent.allowGuestSharing === true;
   wizardImageIndex = Number.isInteger(currentEvent.imageIndex) ? currentEvent.imageIndex : 0;
   wizardEventImageData = currentEvent.imageData || '';
   if (wizardEventImageData) wizardImageIndex = -1;
@@ -918,7 +920,10 @@ async function openInviteFlow() {
   $('#whatsapp-share-link').removeAttribute('href');
   openDialog('#invite-modal');
   try {
-    const invitation = await ensureRemoteInvitation();
+    const invitation = currentEvent.ownerToken
+      ? await ensureRemoteInvitation()
+      : { inviteUrl: currentEvent.inviteUrl };
+    if (!invitation.inviteUrl) throw new Error('No se encontró el enlace de invitación.');
     const inviteUrl = invitation.inviteUrl;
     const dateText = formatDateLong(currentEvent.date);
     $('#invite-event-summary').textContent = `Comparte el enlace para que el grupo confirme su asistencia a «${currentEvent.name}».`;
@@ -1244,6 +1249,12 @@ function renderCurrentEvent() {
   const title = $('.breadcrumbs strong');
   const isEmptyWorkspace = currentEvent.id === 'empty-workspace';
   $$('.event-only').forEach(element => element.classList.toggle('hidden', isEmptyWorkspace));
+  const isOrganizer = Boolean(currentEvent.ownerToken);
+  $$('.organizer-only').forEach(element => element.classList.toggle('hidden', !isOrganizer));
+  const shareEventButton = $('#share-event-button');
+  if (shareEventButton) shareEventButton.classList.toggle('hidden', !isOrganizer && currentEvent.allowGuestSharing !== true);
+  const inviteButton = $('#invite-button');
+  if (inviteButton) inviteButton.classList.toggle('hidden', !isOrganizer);
   const emptyCreateButton = $('#empty-create-event-button');
   if (emptyCreateButton) emptyCreateButton.classList.toggle('hidden', !isEmptyWorkspace);
   if (title) title.textContent = currentEvent.name;
@@ -1733,7 +1744,6 @@ $('#open-task-modal').addEventListener('click', () => openDialog('#task-modal'))
 $('#open-task-modal-secondary').addEventListener('click', () => openDialog('#task-modal'));
 $('#open-expense-modal').addEventListener('click', () => openDialog('#expense-modal'));
 $('#invite-button').addEventListener('click', openInviteFlow);
-$('#share-button').addEventListener('click', openInviteFlow);
 $('#create-event-button').addEventListener('click', startEventWizard);
 $('#empty-create-event-button').addEventListener('click', startEventWizard);
 $('#tutorial-button').addEventListener('click', () => openDialog('#tutorial-modal'));
@@ -1742,6 +1752,10 @@ $('#tutorial-create-event').addEventListener('click', () => {
   startEventWizard();
 });
 $('#delete-event-button').addEventListener('click', openEventActions);
+$('#share-event-button').addEventListener('click', () => {
+  $('#event-actions-modal').close();
+  openInviteFlow();
+});
 $('#edit-event-button').addEventListener('click', startEventEdit);
 $('#open-delete-confirm').addEventListener('click', openDeleteConfirmation);
 $('#cancel-delete').addEventListener('click', () => $('#delete-confirm-modal').close());
@@ -2193,6 +2207,7 @@ async function completeEventWizard() {
       description: String(form.get('description') || '').trim(),
       capacity: Number(form.get('guests')) || 20,
       allowGuests: form.get('allowGuests') === 'on',
+      allowGuestSharing: form.get('allowGuestSharing') === 'on',
       imageIndex: wizardImageIndex < 0 ? 0 : wizardImageIndex,
       imageData: wizardEventImageData
     };
@@ -2274,6 +2289,7 @@ async function completeEventWizard() {
     badge: 'Nuevo evento',
     capacity,
     allowGuests: form.get('allowGuests') === 'on',
+    allowGuestSharing: form.get('allowGuestSharing') === 'on',
     imageIndex: wizardImageIndex < 0 ? 0 : wizardImageIndex,
     imageData: wizardEventImageData,
     invitees: wizardInvitees.slice()

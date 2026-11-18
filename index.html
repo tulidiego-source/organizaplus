@@ -23,6 +23,7 @@
         <button class="nav-link" data-tab="events" aria-label="Mis eventos"><span class="nav-icon">▦</span> Mis eventos <span class="nav-count">3</span></button>
         <button class="nav-link" data-tab="inbox" aria-label="Notificaciones"><span class="nav-icon">♧</span> Notificaciones <span class="notification-dot" data-inbox-dot></span></button>
       </nav>
+      <button class="sidebar-create-button" id="create-event-button" type="button">＋ Crear evento</button>
 
       <div class="workspace-label event-label">ESTE EVENTO</div>
       <nav class="event-nav">
@@ -51,15 +52,6 @@
     </aside>
 
     <main class="main-content">
-      <header class="topbar">
-        <div class="breadcrumbs"><span>Mis eventos</span><span class="crumb-separator">/</span><strong>Barbacoa en casa de Juan</strong></div>
-        <div class="topbar-actions">
-          <button class="icon-button notification-button" aria-label="Notificaciones">♧<span></span></button>
-            <button class="secondary-button" id="create-event-button">＋ Crear evento</button>
-          <button class="share-button" id="share-button"><span>↗</span> Compartir invitación</button>
-        </div>
-      </header>
-
       <div class="page-wrap">
           <section class="event-gallery" id="event-gallery" aria-label="Selecciona un evento"></section>
 
@@ -263,8 +255,9 @@
       <button class="modal-close" type="button" aria-label="Cerrar">×</button>
       <span class="section-eyebrow">OPCIONES DEL EVENTO</span>
       <h2 id="event-actions-title">Opciones</h2>
-      <button class="secondary-button" id="edit-event-button" type="button">Editar evento <span>✎</span></button>
-      <button class="event-action-danger" id="open-delete-confirm" type="button">Eliminar evento <span>⌫</span></button>
+      <button class="secondary-button" id="share-event-button" type="button">Compartir invitación <span>↗</span></button>
+      <button class="secondary-button organizer-only" id="edit-event-button" type="button">Editar evento <span>✎</span></button>
+      <button class="event-action-danger organizer-only" id="open-delete-confirm" type="button">Eliminar evento <span>⌫</span></button>
     </form>
   </dialog>
 
@@ -340,7 +333,11 @@
         <label class="image-upload-button" for="event-image-upload">＋ Subir una imagen propia</label><input id="event-image-upload" type="file" accept="image/jpeg,image/png,image/webp" hidden>
         <label for="event-description">Descripción <span class="optional-label">Opcional</span></label><textarea id="event-description" name="description" rows="2" maxlength="160" placeholder="¿Qué plan tienes en mente?"></textarea>
         <label for="event-location">Lugar o punto de encuentro</label><input id="event-location" name="location" placeholder="Ej. Casa de Juan" required maxlength="80">
-        <label class="checkbox-label"><input id="event-allow-guests" name="allowGuests" type="checkbox" checked> Los invitados pueden traer acompañantes</label>
+        <div class="event-permissions">
+          <span class="form-section-label">Permisos de los invitados</span>
+          <label class="checkbox-label"><input id="event-allow-guests" name="allowGuests" type="checkbox" checked> Pueden añadir adultos y niños</label>
+          <label class="checkbox-label"><input id="event-allow-sharing" name="allowGuestSharing" type="checkbox"> Pueden compartir la invitación</label>
+        </div>
       </section>
 
       <section class="wizard-panel hidden" data-wizard-panel="1">

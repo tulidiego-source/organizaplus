@@ -173,6 +173,24 @@ test('an attendee can confirm additional adults and children', async () => {
   }
 });
 
+test('the organizer can restrict additional adults and children', async () => {
+  const context = await startTestServer();
+  try {
+    const payload = invitationPayload(10);
+    payload.event.allowGuests = false;
+    const created = await requestJson(context.baseUrl, '/api/events', 'POST', payload);
+    const result = await requestJson(context.baseUrl, `/api/invitations/${created.body.inviteToken}/join`, 'POST', {
+      name: 'Pepe',
+      adults: 1,
+      children: 1
+    });
+    assert.equal(result.status, 403);
+    assert.match(result.body.error, /no permite añadir/i);
+  } finally {
+    await context.cleanup();
+  }
+});
+
 test('an attendee can only edit their attendance and propose tasks', async () => {
   const context = await startTestServer();
   try {
