@@ -45,6 +45,7 @@ let joinedInvitationNames = {};
 let joinedInvitationTokens = {};
 let currentViewerAttendeeId = '';
 let editingOwnAttendance = false;
+let editingAttendeeId = '';
 let joinAlreadyHandledToken = '';
 let pendingPurchaseTaskId = '';
 let communityMessages = [];
@@ -624,6 +625,7 @@ function updateJoinAuthenticationUi() {
   const submitButton = $('#join-submit');
   if (!accountStatus || !loginButton || !guestButton || !guestFields || !partyFields || !nameInput) return;
   const canAddParty = currentEvent.allowGuests !== false;
+  const editingOrganizerAttendance = Boolean(editingAttendeeId && currentEvent.ownerToken);
 
   if (editingOwnAttendance) {
     accountStatus.classList.toggle('hidden', !authUser);
@@ -631,7 +633,7 @@ function updateJoinAuthenticationUi() {
     loginButton.classList.add('hidden');
     guestButton.classList.add('hidden');
     guestFields.classList.remove('hidden');
-    partyFields.classList.toggle('hidden', !canAddParty);
+    partyFields.classList.toggle('hidden', !canAddParty && !editingOrganizerAttendance);
     submitButton.classList.remove('hidden');
     submitButton.innerHTML = 'Guardar cambios <span>✓</span>';
     nameInput.readOnly = true;
@@ -1080,8 +1082,9 @@ function renderAttendees() {
       <span class="avatar" style="background:${person.color}">${person.initial}</span>
       <span class="attendee-list-name"><strong>${escapeHtml(person.name)}</strong><small>${escapeHtml(person.role)} · ${escapeHtml(attendeePartyLabel(person))}</small></span>
        <span class="attendance-status ${person.status === 'Pendiente' || person.status === 'Cancelado' ? 'pending' : ''}">${person.status === 'Pendiente' ? 'Por confirmar' : person.status}</span>
+       ${currentEvent.ownerToken && index > 0 ? `<button class="attendee-edit-button" type="button" data-edit-attendee="${escapeHtml(person.id || '')}" aria-label="Editar asistencia de ${escapeHtml(person.name)}">✎</button>` : ''}
        ${index > 0 && currentEvent.ownerToken ? `<button class="attendee-delete-button" type="button" data-delete-attendee="${index}" aria-label="Eliminar a ${escapeHtml(person.name)}">×</button>` : ''}
-       ${person.id === currentViewerAttendeeId ? '<button class="attendee-edit-button" type="button" data-edit-attendee aria-label="Editar mi asistencia">✎</button>' : ''}
+       ${!currentEvent.ownerToken && person.id === currentViewerAttendeeId ? `<button class="attendee-edit-button" type="button" data-edit-attendee="${escapeHtml(person.id || '')}" aria-label="Editar mi asistencia">✎</button>` : ''}
     </div>`).join('');
   populatePeopleOptions();
 }
@@ -1453,6 +1456,31 @@ function setTab(tab, options = {}) {
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
+const swipeSurface = $('.main-content');
+let swipeStart = null;
+swipeSurface?.addEventListener('touchstart', event => {
+  if (event.touches.length !== 1 || event.target.closest?.('input, textarea, select, button, a, dialog')) return;
+  const touch = event.touches[0];
+  swipeStart = { x: touch.clientX, y: touch.clientY, time: Date.now() };
+}, { passive: true });
+swipeSurface?.addEventListener('touchend', event => {
+  if (!swipeStart || event.changedTouches.length !== 1) return;
+  const touch = event.changedTouches[0];
+  const deltaX = touch.clientX - swipeStart.x;
+  const deltaY = touch.clientY - swipeStart.y;
+  const elapsed = Date.now() - swipeStart.time;
+  swipeStart = null;
+  if (elapsed > 700 || Math.abs(deltaX) < 55 || Math.abs(deltaX) < Math.abs(deltaY) * 1.25) return;
+  const tabs = ['overview', ...$$('.event-nav [data-tab]')
+    .filter(button => !button.classList.contains('hidden'))
+    .map(button => button.dataset.tab)
+    .filter(tab => tab !== 'overview')];
+  const currentIndex = tabs.indexOf(currentTab);
+  if (currentIndex < 0) return;
+  const nextIndex = currentIndex + (deltaX < 0 ? 1 : -1);
+  if (nextIndex >= 0 && nextIndex < tabs.length) setTab(tabs[nextIndex]);
+});
+
 function escapeHtml(value) {
   return String(value).replace(/[&<>"']/g, character => ({
     '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
@@ -1764,20 +1792,23 @@ $('#open-delete-confirm').addEventListener('click', openDeleteConfirmation);
 $('#cancel-delete').addEventListener('click', () => $('#delete-confirm-modal').close());
 $('#confirm-delete').addEventListener('click', deleteCurrentEvent);
 $('#attendee-list').addEventListener('click', event => {
-  if (event.target.closest('[data-edit-attendee]')) {
-    const me = attendees.find(person => person.id === currentViewerAttendeeId);
-    if (!me) return;
+  const editButton = event.target.closest('[data-edit-attendee]');
+  if (editButton) {
+    const targetId = editButton.dataset.editAttendee || currentViewerAttendeeId;
+    const person = attendees.find(item => item.id === targetId);
+    if (!person) return;
     editingOwnAttendance = true;
+    editingAttendeeId = person.id;
     activeInviteToken = activeInviteToken || currentEvent.inviteToken || '';
-    currentViewerAttendeeId = me.id;
-    $('#join-name').value = me.name;
+    if (!currentEvent.ownerToken) currentViewerAttendeeId = person.id;
+    $('#join-name').value = person.name;
     $('#join-name').readOnly = true;
     $('#join-guest-fields').classList.remove('hidden');
     $('#join-party-fields').classList.remove('hidden');
     $('#join-submit').classList.remove('hidden');
     $('#join-submit').innerHTML = 'Guardar cambios <span>✓</span>';
-    $('#join-adults').value = Math.max(0, (me.adults || 1) - 1);
-    $('#join-children').value = me.children || 0;
+    $('#join-adults').value = Math.max(0, (person.adults || 1) - 1);
+    $('#join-children').value = person.children || 0;
     $('#join-feedback').textContent = '';
     updateJoinAuthenticationUi();
     openDialog('#join-modal');
@@ -1792,7 +1823,14 @@ $('#cancel-attendee-delete').addEventListener('click', () => {
   $('#attendee-delete-confirm-modal').close();
 });
 $('#confirm-attendee-delete').addEventListener('click', deleteSelectedAttendee);
-$$('.modal-close').forEach(button => button.addEventListener('click', () => button.closest('dialog').close()));
+$$('.modal-close').forEach(button => button.addEventListener('click', () => {
+  const dialog = button.closest('dialog');
+  if (dialog?.id === 'join-modal') {
+    editingOwnAttendance = false;
+    editingAttendeeId = '';
+  }
+  dialog.close();
+}));
 
 $('#auth-toggle').addEventListener('click', () => setAuthMode(authMode === 'login' ? 'register' : 'login'));
 $('#auth-form').addEventListener('submit', async event => {
@@ -2544,20 +2582,25 @@ $('#join-form').addEventListener('submit', async event => {
   submitButton.disabled = true;
   $('#join-feedback').textContent = 'Guardando tu confirmación…';
   try {
-    if (editingOwnAttendance && currentViewerAttendeeId && (joinedInvitationTokens[activeInviteToken] || authUser)) {
-      const updated = await requestApi(`/api/invitations/${encodeURIComponent(activeInviteToken)}/attendees/${encodeURIComponent(currentViewerAttendeeId)}`, {
+    if (editingOwnAttendance && editingAttendeeId && (currentEvent.ownerToken || joinedInvitationTokens[activeInviteToken] || authUser)) {
+      const editedPerson = attendees.find(person => person.id === editingAttendeeId);
+      const headers = currentEvent.ownerToken
+        ? { 'X-Organizer-Token': currentEvent.ownerToken }
+        : (joinedInvitationTokens[activeInviteToken] ? { 'X-Attendee-Token': joinedInvitationTokens[activeInviteToken] } : {});
+      const updated = await requestApi(`/api/invitations/${encodeURIComponent(activeInviteToken)}/attendees/${encodeURIComponent(editingAttendeeId)}`, {
         method: 'PATCH',
-        headers: joinedInvitationTokens[activeInviteToken] ? { 'X-Attendee-Token': joinedInvitationTokens[activeInviteToken] } : {},
-        body: JSON.stringify({ status: 'Confirmado', adults: 1 + additionalAdults, children })
+        headers,
+        body: JSON.stringify({ status: editedPerson?.status || 'Confirmado', adults: 1 + additionalAdults, children })
       });
       attendees = updated.attendees;
       eventNotifications = updated.notifications || eventNotifications;
       editingOwnAttendance = false;
+      editingAttendeeId = '';
       $('#join-submit').innerHTML = 'Sí, me uno <span>✓</span>';
       $('#join-modal').close();
       renderAll();
       persistAppState();
-      showToast('Tu asistencia se ha actualizado.');
+      showToast(currentEvent.ownerToken ? 'Asistencia actualizada.' : 'Tu asistencia se ha actualizado.');
       return;
     }
     const result = await requestApi(`/api/invitations/${encodeURIComponent(activeInviteToken)}/join`, {

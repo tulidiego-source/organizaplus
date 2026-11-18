@@ -28,4 +28,6 @@ test('las notificaciones tienen navegación y se actualizan al renderizar', () =
   assert.match(appJs, /function renderNotifications\(\)/);
   assert.match(appJs, /data-notification-tab/);
   assert.match(appJs, /renderNotifications\(\);/);
+  assert.match(appJs, /touchstart/);
+  assert.match(appJs, /touchend/);
 });

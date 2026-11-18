@@ -1002,13 +1002,16 @@ function eventForAuthenticatedUser(record, request, user) {
         const record = records.find(item => item.token === attendeeDeleteMatch[1]);
         if (!record) throw new HttpError(404, 'La invitación no existe o ha caducado.');
         const attendee = record.attendees.find(person => person.id === attendeeDeleteMatch[2]);
+        const isOrganizer = request.headers['x-organizer-token'] === record.ownerToken;
         const isLinkedAccount = authenticatedUser && attendee
           && (attendee.accountUserId === authenticatedUser.id
             || (record.ownerUserId === authenticatedUser.id && attendee.id === record.attendees[0]?.id));
-        if (!attendee || (attendee.privateToken !== request.headers['x-attendee-token'] && !isLinkedAccount)) {
+        if (!attendee || (!isOrganizer && attendee.privateToken !== request.headers['x-attendee-token'] && !isLinkedAccount)) {
           throw new HttpError(403, 'Solo puedes modificar tu propia asistencia.');
         }
-        const status = body && body.status === 'Cancelado' ? 'Cancelado' : 'Confirmado';
+        const status = body && body.status === 'Cancelado'
+          ? 'Cancelado'
+          : (isOrganizer && body && body.status === 'Pendiente' ? 'Pendiente' : 'Confirmado');
         const adults = Number(body && body.adults);
         const children = Number(body && body.children);
         if (!Number.isInteger(adults) || adults < 1 || adults > 50 || !Number.isInteger(children) || children < 0 || children > 50) {
@@ -1016,7 +1019,7 @@ function eventForAuthenticatedUser(record, request, user) {
         }
         const currentAdults = Math.max(1, Number(attendee.adults) || 1);
         const currentChildren = Math.max(0, Number(attendee.children) || 0);
-        if (status !== 'Cancelado' && record.event.allowGuests !== true && (adults > currentAdults || children > currentChildren)) {
+        if (!isOrganizer && status !== 'Cancelado' && record.event.allowGuests !== true && (adults > currentAdults || children > currentChildren)) {
           throw new HttpError(403, 'El organizador no permite añadir adultos o niños a este evento.');
         }
         const previousStatus = attendee.status;
