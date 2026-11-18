@@ -1159,7 +1159,8 @@ function eventForAuthenticatedUser(record, request, user) {
           record.notifications = [...(record.notifications || []), { id: crypto.randomUUID(), audience: 'all', targetId: task.id, targetType: 'task', title: 'Tarea asignada', detail: `${attendee.name} se encarga de «${task.name}».`, createdAt: new Date().toISOString() }];
         } else if (body && body.action === 'purchase') {
           if (!isOrganizer && (!attendee || !['Confirmado', 'Confirmada'].includes(attendee.status) || task.person !== attendee.name)) throw new HttpError(403, 'Solo la persona encargada o el organizador pueden marcar una compra.');
-          task.purchased = !task.purchased;
+          const wasPurchased = task.purchased === true || task.done === true;
+          task.purchased = !wasPurchased;
           task.done = task.purchased;
           record.notifications = [...(record.notifications || []), { id: crypto.randomUUID(), audience: 'all', targetId: task.id, targetType: 'task', title: task.purchased ? 'Cosa comprada' : 'Compra pendiente', detail: task.purchased ? `«${task.name}» ya está comprada.` : `«${task.name}» vuelve a estar pendiente de compra.`, createdAt: new Date().toISOString() }];
         } else if (isOrganizer) {

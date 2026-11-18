@@ -47,3 +47,9 @@ test('las opciones del evento solo aparecen para el organizador', () => {
   assert.match(indexHtml, /class="more-button event-only organizer-only" id="delete-event-button"/);
   assert.match(appJs, /\.organizer-only.*classList\.toggle\('hidden', !isOrganizer\)/s);
 });
+
+test('el check de compra permite desmarcar una compra ya hecha', () => {
+  assert.match(appJs, /if \(!\(task\.purchased === true \|\| task\.done === true\)\)/);
+  assert.match(appJs, /body: JSON\.stringify\(\{ action: 'purchase' \}\)/);
+  assert.match(appJs, /Marcar compra pendiente/);
+});

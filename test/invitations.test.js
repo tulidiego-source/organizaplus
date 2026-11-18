@@ -281,6 +281,33 @@ test('shared tasks, votes and expenses survive an invitation state update', asyn
   }
 });
 
+test('only the assigned attendee or organizer can toggle a purchase', async () => {
+  const context = await startTestServer();
+  try {
+    const created = await requestJson(context.baseUrl, '/api/events', 'POST', invitationPayload());
+    const token = created.body.inviteToken;
+    const lucia = await requestJson(context.baseUrl, `/api/invitations/${token}/join`, 'POST', { name: 'Lucía' });
+    const ana = await requestJson(context.baseUrl, `/api/invitations/${token}/join`, 'POST', { name: 'Ana' });
+    const task = (await requestJson(context.baseUrl, `/api/invitations/${token}`)).body.tasks[0];
+
+    const claimed = await requestJson(context.baseUrl, `/api/invitations/${token}/tasks/${task.id}`, 'PATCH', { action: 'claim' }, { 'X-Attendee-Token': lucia.body.attendeeToken });
+    assert.equal(claimed.body.tasks[0].person, 'Lucía');
+
+    const denied = await requestJson(context.baseUrl, `/api/invitations/${token}/tasks/${task.id}`, 'PATCH', { action: 'purchase' }, { 'X-Attendee-Token': ana.body.attendeeToken });
+    assert.equal(denied.status, 403);
+
+    const purchased = await requestJson(context.baseUrl, `/api/invitations/${token}/tasks/${task.id}`, 'PATCH', { action: 'purchase' }, { 'X-Attendee-Token': lucia.body.attendeeToken });
+    assert.equal(purchased.body.tasks[0].purchased, true);
+    assert.equal(purchased.body.tasks[0].done, true);
+
+    const unpurchased = await requestJson(context.baseUrl, `/api/invitations/${token}/tasks/${task.id}`, 'PATCH', { action: 'purchase' }, { 'X-Attendee-Token': lucia.body.attendeeToken });
+    assert.equal(unpurchased.body.tasks[0].purchased, false);
+    assert.equal(unpurchased.body.tasks[0].done, false);
+  } finally {
+    await context.cleanup();
+  }
+});
+
 test('the organizer can remove a confirmed or pending attendee with authorization', async () => {
   const context = await startTestServer();
   try {
