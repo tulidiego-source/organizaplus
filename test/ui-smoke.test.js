@@ -31,3 +31,8 @@ test('las notificaciones tienen navegación y se actualizan al renderizar', () =
   assert.match(appJs, /touchstart/);
   assert.match(appJs, /touchend/);
 });
+
+test('el mensaje de edición identifica al asistente seleccionado', () => {
+  assert.match(appJs, /attendees\.find\(person => person\.id === editingAttendeeId\)/);
+  assert.match(appJs, /const editingName = editingPerson\?\.name \|\| authUser\?\.name/);
+});

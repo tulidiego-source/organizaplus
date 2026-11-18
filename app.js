@@ -627,10 +627,14 @@ function updateJoinAuthenticationUi() {
   if (!accountStatus || !loginButton || !guestButton || !guestFields || !partyFields || !nameInput) return;
   const canAddParty = currentEvent.allowGuests !== false;
   const editingOrganizerAttendance = Boolean(editingAttendeeId && currentEvent.ownerToken);
+  const editingPerson = editingOrganizerAttendance
+    ? attendees.find(person => person.id === editingAttendeeId)
+    : null;
 
   if (editingOwnAttendance) {
-    accountStatus.classList.toggle('hidden', !authUser);
-    if (authUser) accountStatus.textContent = `Editando la asistencia de ${authUser.name}.`;
+    const editingName = editingPerson?.name || authUser?.name;
+    accountStatus.classList.toggle('hidden', !editingName);
+    if (editingName) accountStatus.textContent = `Editando la asistencia de ${editingName}.`;
     loginButton.classList.add('hidden');
     guestButton.classList.add('hidden');
     guestFields.classList.remove('hidden');
