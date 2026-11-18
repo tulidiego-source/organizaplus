@@ -18,6 +18,7 @@ body { margin: 0; background: var(--canvas); color: var(--ink); font-size: 14px;
 body.app-loading .app-shell { visibility: hidden; }
 button, input, select { font: inherit; }
 button { color: inherit; cursor: pointer; }
+.locked-field { background: #f4f6f2 !important; color: #7b877e !important; cursor: not-allowed; }
 .app-shell { min-height: 100vh; }
 
 .sidebar { position: fixed; inset: 0 auto 0 0; z-index: 4; display: flex; flex-direction: column; width: 246px; padding: 27px 17px 18px; background: #fff; border-right: 1px solid #eeefe9; }

@@ -621,6 +621,7 @@ function updateJoinAuthenticationUi() {
   const guestButton = $('#join-guest-button');
   const guestFields = $('#join-guest-fields');
   const partyFields = $('#join-party-fields');
+  const nameLabel = $('#join-name-label');
   const nameInput = $('#join-name');
   const submitButton = $('#join-submit');
   if (!accountStatus || !loginButton || !guestButton || !guestFields || !partyFields || !nameInput) return;
@@ -636,6 +637,8 @@ function updateJoinAuthenticationUi() {
     partyFields.classList.toggle('hidden', !canAddParty && !editingOrganizerAttendance);
     submitButton.classList.remove('hidden');
     submitButton.innerHTML = 'Guardar cambios <span>✓</span>';
+    if (nameLabel) nameLabel.textContent = editingOrganizerAttendance ? 'Nombre del asistente (no editable)' : 'Tu nombre';
+    nameInput.classList.toggle('locked-field', editingOrganizerAttendance);
     nameInput.readOnly = true;
     nameInput.required = false;
     return;
@@ -650,6 +653,8 @@ function updateJoinAuthenticationUi() {
     partyFields.classList.toggle('hidden', !canAddParty);
     submitButton.classList.remove('hidden');
     submitButton.innerHTML = 'Sí, me uno <span>✓</span>';
+    if (nameLabel) nameLabel.textContent = 'Tu nombre';
+    nameInput.classList.remove('locked-field');
     nameInput.value = authUser.name;
     nameInput.readOnly = true;
     nameInput.required = false;
@@ -664,6 +669,8 @@ function updateJoinAuthenticationUi() {
   partyFields.classList.add('hidden');
   submitButton.classList.add('hidden');
   submitButton.innerHTML = 'Sí, me uno <span>✓</span>';
+  if (nameLabel) nameLabel.textContent = 'Tu nombre';
+  nameInput.classList.remove('locked-field');
   nameInput.value = '';
   nameInput.readOnly = false;
   nameInput.required = false;
