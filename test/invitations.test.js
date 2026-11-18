@@ -191,6 +191,25 @@ test('the organizer can edit an attendee party without changing their name', asy
   }
 });
 
+test('the organizer can confirm another attendee while editing their party', async () => {
+  const context = await startTestServer();
+  try {
+    const payload = invitationPayload(10);
+    payload.attendees.push({ name: 'Pendiente', role: 'Participante', status: 'Pendiente', adults: 1, children: 0 });
+    const created = await requestJson(context.baseUrl, '/api/events', 'POST', payload);
+    const pending = (await requestJson(context.baseUrl, `/api/invitations/${created.body.inviteToken}`)).body.attendees.find(person => person.name === 'Pendiente');
+    const updated = await requestJson(context.baseUrl, `/api/invitations/${created.body.inviteToken}/attendees/${pending.id}`, 'PATCH', {
+      status: 'Confirmado', adults: 2, children: 1
+    }, { 'X-Organizer-Token': created.body.ownerToken });
+    const result = updated.body.attendees.find(person => person.id === pending.id);
+    assert.equal(result.status, 'Confirmado');
+    assert.equal(result.adults, 2);
+    assert.equal(result.children, 1);
+  } finally {
+    await context.cleanup();
+  }
+});
+
 test('the organizer can restrict additional adults and children', async () => {
   const context = await startTestServer();
   try {

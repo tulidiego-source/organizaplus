@@ -37,6 +37,13 @@ test('el mensaje de edición identifica al asistente seleccionado', () => {
   assert.match(appJs, /const editingName = editingPerson\?\.name \|\| authUser\?\.name/);
 });
 
+test('el organizador puede cambiar el estado de asistencia al editar', () => {
+  assert.match(indexHtml, /id="join-status-fields"/);
+  assert.match(indexHtml, /id="join-status"/);
+  assert.match(appJs, /const editedStatus = currentEvent\.ownerToken/);
+  assert.match(appJs, /status: editedStatus/);
+});
+
 test('crear evento solo se muestra en Mis eventos', () => {
   assert.match(indexHtml, /class="sidebar-create-button hidden" id="create-event-button"/);
   assert.match(appJs, /create-event-button.*currentTab !== 'events'/s);

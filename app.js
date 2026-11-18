@@ -622,10 +622,12 @@ function updateJoinAuthenticationUi() {
   const guestButton = $('#join-guest-button');
   const guestFields = $('#join-guest-fields');
   const partyFields = $('#join-party-fields');
+  const statusFields = $('#join-status-fields');
+  const statusInput = $('#join-status');
   const nameLabel = $('#join-name-label');
   const nameInput = $('#join-name');
   const submitButton = $('#join-submit');
-  if (!accountStatus || !loginButton || !guestButton || !guestFields || !partyFields || !nameInput) return;
+  if (!accountStatus || !loginButton || !guestButton || !guestFields || !partyFields || !statusFields || !statusInput || !nameInput) return;
   const canAddParty = currentEvent.allowGuests !== false;
   const editingOrganizerAttendance = Boolean(editingAttendeeId && currentEvent.ownerToken);
   const editingPerson = editingOrganizerAttendance
@@ -640,6 +642,8 @@ function updateJoinAuthenticationUi() {
     guestButton.classList.add('hidden');
     guestFields.classList.remove('hidden');
     partyFields.classList.toggle('hidden', !canAddParty && !editingOrganizerAttendance);
+    statusFields.classList.toggle('hidden', !editingOrganizerAttendance);
+    if (editingOrganizerAttendance) statusInput.value = editingPerson?.status || 'Confirmado';
     submitButton.classList.remove('hidden');
     submitButton.innerHTML = 'Guardar cambios <span>✓</span>';
     if (nameLabel) nameLabel.textContent = editingOrganizerAttendance ? 'Nombre del asistente (no editable)' : 'Tu nombre';
@@ -656,6 +660,7 @@ function updateJoinAuthenticationUi() {
     guestButton.classList.add('hidden');
     guestFields.classList.add('hidden');
     partyFields.classList.toggle('hidden', !canAddParty);
+    statusFields.classList.add('hidden');
     submitButton.classList.remove('hidden');
     submitButton.innerHTML = 'Sí, me uno <span>✓</span>';
     if (nameLabel) nameLabel.textContent = 'Tu nombre';
@@ -672,6 +677,7 @@ function updateJoinAuthenticationUi() {
   guestButton.classList.remove('hidden');
   guestFields.classList.add('hidden');
   partyFields.classList.add('hidden');
+  statusFields.classList.add('hidden');
   submitButton.classList.add('hidden');
   submitButton.innerHTML = 'Sí, me uno <span>✓</span>';
   if (nameLabel) nameLabel.textContent = 'Tu nombre';
@@ -2615,13 +2621,16 @@ $('#join-form').addEventListener('submit', async event => {
   try {
     if (editingOwnAttendance && editingAttendeeId && (currentEvent.ownerToken || joinedInvitationTokens[activeInviteToken] || authUser)) {
       const editedPerson = attendees.find(person => person.id === editingAttendeeId);
+      const editedStatus = currentEvent.ownerToken
+        ? ($('#join-status').value || editedPerson?.status || 'Confirmado')
+        : (editedPerson?.status || 'Confirmado');
       const headers = currentEvent.ownerToken
         ? { 'X-Organizer-Token': currentEvent.ownerToken }
         : (joinedInvitationTokens[activeInviteToken] ? { 'X-Attendee-Token': joinedInvitationTokens[activeInviteToken] } : {});
       const updated = await requestApi(`/api/invitations/${encodeURIComponent(activeInviteToken)}/attendees/${encodeURIComponent(editingAttendeeId)}`, {
         method: 'PATCH',
         headers,
-        body: JSON.stringify({ status: editedPerson?.status || 'Confirmado', adults: 1 + additionalAdults, children })
+        body: JSON.stringify({ status: editedStatus, adults: 1 + additionalAdults, children })
       });
       attendees = updated.attendees;
       eventNotifications = updated.notifications || eventNotifications;
