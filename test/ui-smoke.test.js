@@ -42,3 +42,8 @@ test('crear evento solo se muestra en Mis eventos', () => {
   assert.match(appJs, /create-event-button.*currentTab !== 'events'/s);
   assert.doesNotMatch(indexHtml, /empty-create-event-button/);
 });
+
+test('las opciones del evento solo aparecen para el organizador', () => {
+  assert.match(indexHtml, /class="more-button event-only organizer-only" id="delete-event-button"/);
+  assert.match(appJs, /\.organizer-only.*classList\.toggle\('hidden', !isOrganizer\)/s);
+});
