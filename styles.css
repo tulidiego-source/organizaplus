@@ -501,6 +501,15 @@ h1 { margin-bottom: 6px; color: #263a30; font-size: clamp(24px, 2.4vw, 31px); fo
   .share-button, .secondary-button { min-height: 42px; padding: 9px 11px; font-size: 11px; }
   .page-wrap { padding: 14px 12px 12px; }
   .event-gallery { margin-bottom: 14px; }
+  .task-board { padding: 3px 12px; }
+  .task-board .task-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px 8px; align-items: center; padding: 13px 2px; }
+  .task-board .task-main { grid-column: 1; grid-row: 1; }
+  .task-board .task-main strong { font-size: 12px; }
+  .task-board .task-main small { font-size: 10px; }
+  .task-board .task-check { grid-column: 2; grid-row: 1; }
+  .task-board .task-owner { grid-column: 1 / -1; grid-row: 2; justify-content: flex-end; width: 100%; margin-left: 0; min-width: 0; padding-top: 4px; border-top: 1px solid #f0f2ed; }
+  .task-board .task-assignee { flex: 1; max-width: none; min-width: 0; }
+  .task-board .task-purchased { margin-left: 4px; }
   .event-hero { grid-template-columns: 1fr; }
   .hero-image { min-height: 164px; }
   .hero-art { margin-top: 29px; transform: scale(.74); }

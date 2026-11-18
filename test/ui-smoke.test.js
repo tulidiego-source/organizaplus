@@ -8,6 +8,7 @@ const { test } = require('node:test');
 const projectRoot = path.join(__dirname, '..');
 const indexHtml = fs.readFileSync(path.join(projectRoot, 'index.html'), 'utf8');
 const appJs = fs.readFileSync(path.join(projectRoot, 'app.js'), 'utf8');
+const stylesCss = fs.readFileSync(path.join(projectRoot, 'styles.css'), 'utf8');
 
 test('la interfaz contiene los destinos de mapa y notificaciones', () => {
   assert.match(indexHtml, /class="map-link"/);
@@ -70,4 +71,9 @@ test('la lista de compras identifica y filtra las cosas del usuario', () => {
   assert.match(appJs, /taskFilter === 'unassigned'/);
   assert.match(appJs, /escapeHtml\(isMine \? 'Tú' : task\.person\)/);
   assert.match(appJs, /classList.*task-row-mine|task-row\$\{isMine \? ' task-row-mine'/s);
+});
+
+test('la lista de compras tiene un formato móvil de dos niveles', () => {
+  assert.match(stylesCss, /\.task-board \.task-row \{ display: grid; grid-template-columns: minmax\(0, 1fr\) auto;/);
+  assert.match(stylesCss, /\.task-board \.task-owner \{ grid-column: 1 \/ -1; grid-row: 2;/);
 });
