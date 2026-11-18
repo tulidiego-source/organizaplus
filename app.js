@@ -48,6 +48,7 @@ let editingOwnAttendance = false;
 let editingAttendeeId = '';
 let joinAlreadyHandledToken = '';
 let pendingPurchaseTaskId = '';
+let taskFilter = 'all';
 let communityMessages = [];
 let eventPhotos = [];
 let communityLoading = false;
@@ -961,10 +962,12 @@ function initials(name) {
 
 function renderTaskRow(task, index, interactive = false) {
   const viewer = attendees.find(person => person.id === currentViewerAttendeeId);
+  const viewerName = viewer?.name || (currentEvent.ownerToken ? attendees.find(person => person.role === 'Organizador')?.name : authUser?.name) || '';
+  const isMine = Boolean(task.person && viewerName && task.person === viewerName);
   const purchased = task.purchased === true || task.done === true;
-  const canMarkPurchased = Boolean(currentEvent.ownerToken || (viewer && task.person === viewer.name));
+  const canMarkPurchased = Boolean(currentEvent.ownerToken || isMine);
   const owner = task.person
-    ? `<span class="mini-avatar" style="background:${personColor(task.person)}">${escapeHtml(initials(task.person))}</span>${escapeHtml(task.person)}`
+    ? `<span class="mini-avatar" style="background:${personColor(task.person)}">${escapeHtml(initials(task.person))}</span>${escapeHtml(isMine ? 'Tú' : task.person)}`
     : '<span class="mini-avatar unassigned">＋</span>Pendiente';
   const proposal = task.proposalStatus === 'proposed';
   const proposalAction = proposal && currentEvent.ownerToken ? `<button class="secondary-button task-accept-button" type="button" data-accept-task="${escapeHtml(task.id || '')}">Aceptar</button>` : (proposal ? '<small class="task-proposal-label">Propuesta pendiente</small>' : '');
@@ -975,7 +978,7 @@ function renderTaskRow(task, index, interactive = false) {
   const purchasedControl = interactive && canMarkPurchased
     ? `<button class="task-purchased ${purchased ? 'done' : ''}" data-task-purchased="${escapeHtml(task.id || '')}" type="button" aria-label="${purchased ? 'Marcar compra pendiente' : 'Marcar como comprado'}">${purchased ? '✓' : '€'}</button>`
     : `<span class="task-purchased task-purchased-static ${purchased ? 'done' : ''}" aria-label="${purchased ? 'Comprado' : 'Pendiente de compra'}">${purchased ? '✓' : '€'}</span>`;
-  return `<div class="task-row" data-task-id="${escapeHtml(task.id || '')}">
+  return `<div class="task-row${isMine ? ' task-row-mine' : ''}" data-task-id="${escapeHtml(task.id || '')}">
     ${claimControl}
     <span class="task-main"><strong>${escapeHtml(task.name)}</strong><small>${escapeHtml(task.quantity || 'Cantidad por definir')}</small></span>
     <span class="task-owner">${assignmentControl || owner}${proposalAction}${purchasedControl}</span>
@@ -985,7 +988,20 @@ function renderTaskRow(task, index, interactive = false) {
 function renderTasks() {
   const assignedCount = tasks.filter(task => task.person).length;
   $('#task-preview').innerHTML = tasks.slice(0, 5).map((task, index) => renderTaskRow(task, index)).join('');
-  $('#task-board').innerHTML = tasks.map((task, index) => renderTaskRow(task, index, true)).join('');
+  const viewer = attendees.find(person => person.id === currentViewerAttendeeId);
+  const viewerName = viewer?.name || (currentEvent.ownerToken ? attendees.find(person => person.role === 'Organizador')?.name : authUser?.name) || '';
+  const visibleTasks = taskFilter === 'mine' ? tasks.filter(task => task.person === viewerName) : tasks;
+  $('#task-board').innerHTML = visibleTasks.length
+    ? visibleTasks.map((task, index) => renderTaskRow(task, index, true)).join('')
+    : '<p class="task-filter-empty">No tienes compras asignadas en este evento.</p>';
+  const taskFilterInput = $('#task-filter');
+  if (taskFilterInput) {
+    taskFilterInput.value = taskFilter;
+    taskFilterInput.onchange = event => {
+      taskFilter = event.target.value === 'mine' ? 'mine' : 'all';
+      renderTasks();
+    };
+  }
   $('#task-progress').textContent = `${assignedCount} de ${tasks.length}`;
   $('#status-unassigned-count').textContent = tasks.length - assignedCount;
   $('#nav-task-count').textContent = tasks.length;

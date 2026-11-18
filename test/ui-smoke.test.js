@@ -53,3 +53,10 @@ test('el check de compra permite desmarcar una compra ya hecha', () => {
   assert.match(appJs, /body: JSON\.stringify\(\{ action: 'purchase' \}\)/);
   assert.match(appJs, /Marcar compra pendiente/);
 });
+
+test('la lista de compras identifica y filtra las cosas del usuario', () => {
+  assert.match(indexHtml, /id="task-filter" class="task-filter"/);
+  assert.match(indexHtml, /value="mine">Mis cosas/);
+  assert.match(appJs, /escapeHtml\(isMine \? 'Tú' : task\.person\)/);
+  assert.match(appJs, /classList.*task-row-mine|task-row\$\{isMine \? ' task-row-mine'/s);
+});
