@@ -510,6 +510,7 @@ function loadPersistedData() {
 function activateEvent(event) {
   saveCurrentEventData();
   currentEvent = event;
+  currentTab = 'overview';
   communityMessages = [];
   eventPhotos = [];
   communityLoadedToken = '';

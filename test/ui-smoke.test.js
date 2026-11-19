@@ -45,10 +45,17 @@ test('el organizador puede cambiar el estado de asistencia al editar', () => {
   assert.match(appJs, /status: editedStatus/);
 });
 
-test('crear evento solo se muestra en Mis eventos', () => {
+test('crear evento solo se muestra desde la vista de eventos', () => {
   assert.match(indexHtml, /class="sidebar-create-button hidden" id="create-event-button"/);
   assert.match(appJs, /create-event-button.*currentTab !== 'events'/s);
+  assert.doesNotMatch(indexHtml, /data-tab="events"[^>]*>.*Mis eventos/s);
   assert.doesNotMatch(indexHtml, /empty-create-event-button/);
+});
+
+test('el selector superior de eventos abre el inicio del evento', () => {
+  assert.match(indexHtml, /id="event-gallery" aria-label="Selecciona un evento"/);
+  assert.match(indexHtml, /data-tab="overview" aria-label="Inicio" title="Inicio"/);
+  assert.match(appJs, /currentEvent = event;\s+currentTab = 'overview';/);
 });
 
 test('las opciones del evento solo aparecen para el organizador', () => {
