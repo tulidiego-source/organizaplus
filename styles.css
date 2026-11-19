@@ -758,49 +758,58 @@ h1 { margin-bottom: 6px; color: #263a30; font-size: clamp(24px, 2.4vw, 31px); fo
 }
 
 /* Ajuste final de legibilidad (se mantiene después de las reglas responsive). */
-:root { --ink: #183126; --muted: #52645a; --line: #d9e3da; --canvas: #f3f6f2; --green: #17603c; --green-soft: #e5f2e7; --orange: #b85f25; --orange-soft: #fff0e4; }
+:root { --ink: #172f46; --muted: #4b647a; --line: #d4e1ec; --canvas: #f4f8fc; --green: #155b8a; --green-soft: #e6f1f9; --orange: #b87416; --orange-soft: #fff4d8; --yellow: #f2b84b; }
 body { color: var(--ink); font-size: 16px; line-height: 1.5; }
 button, input, select { font-size: 1rem; }
 button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible { outline: 3px solid #e4a72f; outline-offset: 3px; }
-.workspace-label, .section-eyebrow, .event-kicker { color: #496257; font-size: 11px; }
-.nav-link { min-height: 46px; color: #3e5147; font-size: 15px; }
-.nav-link:hover, .nav-link.active { color: #124a30; }
-.nav-link.active { background: #deefe1; }
+.workspace-label, .section-eyebrow, .event-kicker { color: #41647f; font-size: 11px; }
+.nav-link { min-height: 46px; color: #34516a; font-size: 15px; }
+.nav-link:hover, .nav-link.active { color: #0d4f7d; }
+.nav-link.active { background: #dcecf8; }
 .nav-icon { width: 23px; font-size: 21px; }
-.breadcrumbs { color: #5d7065; font-size: 13px; }
-.breadcrumbs strong { color: #244136; }
-.hero-description, .panel-subtitle, .tab-header p { color: #52645a; font-size: 14px; line-height: 1.55; }
-.event-organizer { color: #276b45; font-size: 13px; }
-.meta-item strong, .status-card-copy strong, .task-main strong, .attendee-list-name strong { color: #263f33; }
+.breadcrumbs { color: #4d687e; font-size: 13px; }
+.breadcrumbs strong { color: #203f59; }
+.hero-description, .panel-subtitle, .tab-header p { color: #4b647a; font-size: 14px; line-height: 1.55; }
+.event-organizer { color: #155b8a; font-size: 13px; }
+.meta-item strong, .status-card-copy strong, .task-main strong, .attendee-list-name strong { color: #25465e; }
 .meta-item strong, .status-card-copy strong { font-size: 13px; }
-.meta-item small, .status-note, .task-main small, .attendee-list-name small { color: #5b6d62; font-size: 12px; }
-.status-heading h2, .panel-heading h2, .tab-header h2 { color: #1d382b; font-size: 21px; }
-.status-card { min-height: 96px; border-color: #d8e3d9; box-shadow: 0 2px 8px rgba(26, 61, 42, .04); }
-.status-card-copy small { color: #526b5d; font-size: 10px; }
-.panel { border-color: #d8e3d9; box-shadow: 0 2px 8px rgba(26, 61, 42, .035); }
+.meta-item small, .status-note, .task-main small, .attendee-list-name small { color: #4d687e; font-size: 12px; }
+.status-heading h2, .panel-heading h2, .tab-header h2 { color: #1d3f5b; font-size: 21px; }
+.status-card { min-height: 96px; border-color: #d4e1ec; box-shadow: 0 2px 8px rgba(25, 70, 105, .05); }
+.status-card-copy small { color: #526f86; font-size: 10px; }
+.panel { border-color: #d4e1ec; box-shadow: 0 2px 8px rgba(25, 70, 105, .04); }
 .task-row { min-height: 48px; }
 .task-main strong { font-size: 14px; }
 .task-main small { font-size: 12px; }
-.task-owner { color: #52645a; font-size: 12px; }
-.task-filter-label { color: #40574a; font-size: 13px; }
-.task-filter, .task-assignee { min-height: 42px; color: #174b31; font-size: 13px; }
+.task-owner { color: #4b647a; font-size: 12px; }
+.task-filter-label { color: #405d74; font-size: 13px; }
+.task-filter, .task-assignee { min-height: 42px; color: #155b8a; font-size: 13px; }
 .task-purchased, .task-check { width: 32px; height: 32px; font-size: 17px; }
 .task-row-mine { background: #e7f4e8; }
 .task-filter-empty { color: #52645a; font-size: 14px; }
 .primary-button, .secondary-button, .share-button, .compact-action-button, .confirm-button { min-height: 44px; font-size: 13px; }
-.primary-button { background: #17603c; }
-.primary-button:hover { background: #104a2e; }
-.secondary-button, .share-button { border-color: #cbdacc; color: #294b39; }
-.compact-action-button { background: #e8f4e8; color: #17603c; }
+.primary-button { background: #155b8a; }
+.primary-button:hover { background: #0d456b; }
+.secondary-button, .share-button { border-color: #bfd5e5; color: #294f6b; }
+.compact-action-button { background: #e8f4fb; color: #155b8a; }
 .text-button, .panel-link, .quiet-button { font-size: 13px; }
 .attendee-list-row { min-height: 66px; }
 .attendee-list-name strong { font-size: 14px; }
 .attendee-list-name small { font-size: 12px; }
 .attendance-status { font-size: 12px; }
 .chat-message-heading strong { font-size: 14px; }
-.chat-message-heading small { color: #52645a; font-size: 12px; }
-.chat-message p { color: #263f33; font-size: 15px; line-height: 1.55; }
+.chat-message-heading small { color: #4b647a; font-size: 12px; }
+.chat-message p { color: #294b64; font-size: 15px; line-height: 1.55; }
 .community-form input { font-size: 15px; }
-.modal-form p, .wizard-heading p, .wizard-hint { color: #52645a; font-size: 13px; line-height: 1.5; }
-.modal-form label, .wizard-panel > label { color: #304d3c; font-size: 13px; }
-.modal-form input, .modal-form select, .modal-form textarea { color: #1b3328; font-size: 14px; }
+.modal-form p, .wizard-heading p, .wizard-hint { color: #4b647a; font-size: 13px; line-height: 1.5; }
+.modal-form label, .wizard-panel > label { color: #304f68; font-size: 13px; }
+.modal-form input, .modal-form select, .modal-form textarea { color: #172f46; font-size: 14px; }
+.task-row-mine { background: #e8f4fb; }
+.task-row-mine .task-main strong { color: #155b8a; }
+.task-purchased.done { border-color: #e3ad3b; background: #fff3d5; color: #8e5b0c; }
+.people-icon { background: #e4f1fa; color: #155b8a; }
+.list-icon { background: #fff3d9; color: #a96b10; }
+.money-icon { background: #e9f0fb; color: #416da2; }
+.orange-dot { background: #d99a27; }
+.green-dot { background: #2f8ac1; }
+.share-total { background: #edf5fb; }
