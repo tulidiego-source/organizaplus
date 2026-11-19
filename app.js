@@ -1103,10 +1103,10 @@ function renderTasks() {
   }));
 }
 
-function attendeeAvatarStyle(person) {
+function attendeeAvatarStyle(person, fallbackIndex = 0) {
   const value = person?.avatar;
   if (typeof value === 'string' && value.startsWith('data:image/')) return customImageStyle(value);
-  const avatarIndex = Number(value);
+  const avatarIndex = value === undefined || value === null || value === '' ? null : Number(value);
   if (Number.isInteger(avatarIndex) && avatarIndex >= 0 && avatarIndex < avatarImageCount) {
     return spriteStyle('/avatars.png', avatarIndex, 4, 3);
   }
@@ -1118,11 +1118,14 @@ function attendeeAvatarStyle(person) {
       return spriteStyle('/avatars.png', ownAvatarIndex, 4, 3);
     }
   }
+  if (Number.isInteger(fallbackIndex) && fallbackIndex >= 0) {
+    return spriteStyle('/avatars.png', fallbackIndex % avatarImageCount, 4, 3);
+  }
   return person?.color ? `background:${escapeHtml(person.color)};` : '';
 }
 
-function attendeeAvatarMarkup(person) {
-  const style = attendeeAvatarStyle(person);
+function attendeeAvatarMarkup(person, fallbackIndex = 0) {
+  const style = attendeeAvatarStyle(person, fallbackIndex);
   const hasImage = style.includes('background-image:');
   return `<span class="avatar"${style ? ` style="${style}"` : ''}>${hasImage ? '' : escapeHtml(person.initial || '')}</span>`;
 }
@@ -1142,7 +1145,7 @@ function renderAttendees() {
   $('#status-pending-count').textContent = pending;
   $('#split-count').textContent = confirmed;
   $('#avatar-stack').innerHTML = confirmedPeople.slice(0, 4).map(person =>
-    attendeeAvatarMarkup(person)
+    attendeeAvatarMarkup(person, confirmedPeople.indexOf(person))
   ).join('') + (confirmedPeople.length > 4 ? `<span class="avatar avatar-extra">+${confirmedPeople.length - 4}</span>` : '');
   $('#avatar-stack').setAttribute('aria-label', `${confirmed} ${confirmed === 1 ? 'asistente confirmado' : 'asistentes confirmados'}`);
   const me = attendees.find(person => person.id === currentViewerAttendeeId) || attendees[0];
@@ -1152,11 +1155,11 @@ function renderAttendees() {
   $('#confirm-button-text').textContent = organizerConfirmed ? 'Asistencia confirmada' : 'Confirmar asistencia';
 
   $('#attendee-strip').innerHTML = attendees.slice(0, 6).map(person =>
-    `<div class="person-chip">${attendeeAvatarMarkup(person)}<span>${escapeHtml(person.name.split(' ')[0])}</span></div>`
+    `<div class="person-chip">${attendeeAvatarMarkup(person, attendees.indexOf(person))}<span>${escapeHtml(person.name.split(' ')[0])}</span></div>`
   ).join('');
   $('#attendee-list').innerHTML = attendees.map((person, index) => `
     <div class="attendee-list-row" data-attendee-id="${escapeHtml(person.id || '')}">
-       ${attendeeAvatarMarkup(person)}
+       ${attendeeAvatarMarkup(person, index)}
       <span class="attendee-list-name"><strong>${escapeHtml(person.name)}</strong><small>${escapeHtml(person.role)} · ${escapeHtml(attendeePartyLabel(person))}</small></span>
        <span class="attendance-status ${person.status === 'Pendiente' || person.status === 'Cancelado' ? 'pending' : ''}">${person.status === 'Pendiente' ? 'Por confirmar' : person.status}</span>
        ${currentEvent.ownerToken && index > 0 ? `<button class="attendee-edit-button" type="button" data-edit-attendee="${escapeHtml(person.id || '')}" aria-label="Editar asistencia de ${escapeHtml(person.name)}">✎</button>` : ''}

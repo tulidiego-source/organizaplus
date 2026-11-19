@@ -67,11 +67,19 @@ test('las novedades se actualizan en los puntos del menú', () => {
 });
 
 test('los asistentes muestran el avatar elegido en su perfil', () => {
-  assert.match(appJs, /function attendeeAvatarStyle\(person\)/);
+  assert.match(appJs, /function attendeeAvatarStyle\(person, fallbackIndex = 0\)/);
   assert.match(appJs, /customImageStyle\(value\)/);
+  assert.match(appJs, /value === undefined \|\| value === null \|\| value === '' \? null : Number\(value\)/);
   assert.match(appJs, /spriteStyle\('\/avatars\.png', avatarIndex, 4, 3\)/);
-  assert.match(appJs, /function attendeeAvatarMarkup\(person\)/);
-  assert.match(appJs, /attendeeAvatarMarkup\(person\)/);
+  assert.match(appJs, /fallbackIndex % avatarImageCount/);
+  assert.match(appJs, /function attendeeAvatarMarkup\(person, fallbackIndex = 0\)/);
+  assert.match(appJs, /attendeeAvatarMarkup\(person(?:, fallbackIndex)?/);
+});
+
+test('el menú muestra nombres breves para chat y fotos', () => {
+  assert.match(indexHtml, /aria-label="Chat" title="Chat">[\s\S]*> Chat<span/);
+  assert.match(indexHtml, /aria-label="Fotos" title="Fotos">[\s\S]*> Fotos<span/);
+  assert.doesNotMatch(indexHtml, /Chat del evento|Fotos del evento/);
 });
 
 test('el menú inferior ocupa todo el ancho disponible', () => {
