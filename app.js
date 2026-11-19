@@ -68,8 +68,9 @@ let pendingDeepLinkTab = '';
 
 function registerProgressiveApp() {
   if (!('serviceWorker' in navigator)) return;
-  navigator.serviceWorker.register('/sw.js').then(registration => {
+  navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' }).then(registration => {
     serviceWorkerRegistration = registration;
+    return registration.update();
   }).catch(error => console.warn('No se pudo activar el modo instalable.', error));
 }
 
