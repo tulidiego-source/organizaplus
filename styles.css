@@ -192,6 +192,7 @@ button, .nav-link, .icon-button, .task-purchased, .task-check, .attendee-delete-
 .expense-symbol { background: #fff2d8; color: #a96b10; }
 .expense-total-card span, .expense-total-card small, .expense-entry-copy small, .balance-entry .owes-note { color: #4b647a; }
 .share-total { background: #edf5fb; }
+.section-notification-dot { background: #2f8ac1; }
 .brand, .profile-copy strong, .help-card strong, .hero-title-row h1, .wizard-heading h2, .modal-form h2 { color: #172f46; }
 .brand-mark { background: #155b8a; }
 .brand-mark span, .brand-plus { color: #f2b84b; }

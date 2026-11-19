@@ -14,8 +14,17 @@ test('la interfaz contiene los destinos de mapa y notificaciones', () => {
   assert.match(indexHtml, /class="map-link"/);
   assert.match(indexHtml, /id="inbox-view"/);
   assert.match(indexHtml, /id="notifications-list"/);
-  assert.match(indexHtml, /aria-label="Notificaciones"/);
   assert.match(indexHtml, /id="event-organizer"/);
+  assert.doesNotMatch(indexHtml, /<button[^>]*data-tab="inbox"[^>]*aria-label="Notificaciones"/);
+});
+
+test('las novedades se indican con puntos azules en cada apartado', () => {
+  assert.match(indexHtml, /data-section-dot="attendees"/);
+  assert.match(indexHtml, /data-section-dot="tasks"/);
+  assert.match(indexHtml, /data-section-dot="expenses"/);
+  assert.match(indexHtml, /data-section-dot="chat"/);
+  assert.match(indexHtml, /data-section-dot="photos"/);
+  assert.match(stylesCss, /\.section-notification-dot \{ background: #2f8ac1; \}/);
 });
 
 test('el enlace de mapa se genera con una búsqueda segura', () => {
