@@ -152,6 +152,39 @@ body { background: var(--canvas); color: var(--ink); }
 .notification-entry-copy strong { color: #25465e; }
 .notification-entry-copy small { color: #4b647a; }
 .notification-entry-arrow { color: #547087; }
+
+/* Accesibilidad y ergonomía: escala 4/8, contraste alto y controles táctiles amplios. */
+html { font-size: 16px; }
+body { font-size: 1rem; line-height: 1.5; }
+p, li { max-width: 70ch; }
+button, a, input, select, textarea { -webkit-tap-highlight-color: transparent; }
+button, .nav-link, .icon-button, .task-purchased, .task-check, .attendee-delete-button { min-width: 44px; min-height: 44px; }
+.nav-link { padding: 12px 16px; }
+.icon-button { display: inline-grid; place-items: center; }
+.primary-button, .secondary-button, .share-button, .compact-action-button, .confirm-button { min-height: 48px; padding: 12px 16px; }
+.task-purchased, .task-check { min-width: 44px; min-height: 44px; }
+.task-filter, .task-assignee, .modal-form input, .modal-form select, .modal-form textarea { min-height: 48px; }
+.task-row { gap: 12px; padding-top: 12px; padding-bottom: 12px; }
+.panel, .status-card, .event-hero, .expense-total-card { border-radius: 12px; }
+.event-status, .content-grid, .attendees-panel, .tab-view { margin-top: 32px; }
+.panel-heading, .status-heading, .tab-header { gap: 16px; }
+.status-grid, .content-grid, .expense-summary-grid { gap: 16px; }
+.error-message, .auth-feedback, .join-feedback, .profile-feedback { color: #a33a2b; font-weight: 600; }
+.empty-hint, .task-filter-empty { color: #45647c; }
+
+@media (max-width: 560px) {
+  body { padding-bottom: env(safe-area-inset-bottom); }
+  .main-content { padding-bottom: calc(76px + env(safe-area-inset-bottom)); }
+  .sidebar { height: calc(70px + env(safe-area-inset-bottom)); padding-bottom: env(safe-area-inset-bottom); }
+  .nav-link, .nav-link:hover, .nav-link.active { min-width: 48px; min-height: 48px; padding: 7px 4px; font-size: 11px !important; }
+  .nav-icon { font-size: 20px; }
+  .page-wrap { padding-right: 16px; padding-left: 16px; }
+  .tab-header { gap: 16px; }
+  .tab-header h2 { font-size: 26px; }
+  .tab-header p { font-size: 15px; }
+  .modal-form { padding: 32px 20px; }
+  .modal-form input, .modal-form select, .modal-form textarea { min-height: 48px; font-size: 16px; }
+}
 .chat-message-heading strong { color: #155b8a; }
 .chat-message-heading small, .chat-message p { color: #294b64; }
 .community-form { border-top-color: #d4e1ec; }
