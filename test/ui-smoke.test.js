@@ -34,6 +34,12 @@ test('el menú no deja una sección vacía y conserva la paleta azul y amarilla'
   assert.match(stylesCss, /\.help-spark \{ background: #fff3d9; color: #a96b10; \}/);
 });
 
+test('el menú usa iconos intuitivos para asistentes, compras y chat', () => {
+  assert.match(indexHtml, /data-tab="attendees"[^>]*>[\s\S]*👥/);
+  assert.match(indexHtml, /data-tab="tasks"[^>]*>[\s\S]*🛒/);
+  assert.match(indexHtml, /data-tab="chat"[^>]*>[\s\S]*💬/);
+});
+
 test('el enlace de mapa se genera con una búsqueda segura', () => {
   assert.match(appJs, /https:\/\/www\.google\.com\/maps\/search\/\?api=1&query=/);
   assert.match(appJs, /encodeURIComponent\(currentEvent\.location\)/);
