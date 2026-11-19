@@ -1460,7 +1460,7 @@ function highlightNotificationTarget(notification, tab, options = {}) {
 }
 
 function setTab(tab, options = {}) {
-  const validTabs = ['events', 'overview', 'attendees', 'tasks', 'expenses', 'chat', 'photos', 'inbox'];
+  const validTabs = ['events', 'overview', 'attendees', 'tasks', 'expenses', 'chat', 'photos'];
   currentTab = validTabs.includes(tab) ? tab : 'overview';
   const hasEvent = currentEvent && currentEvent.id !== 'empty-workspace';
   const viewer = attendees.find(person => person.id === currentViewerAttendeeId);
@@ -1485,7 +1485,6 @@ function setTab(tab, options = {}) {
   $('#expenses-view').classList.toggle('hidden', currentTab !== 'expenses' || !hasEvent);
   $('#chat-view').classList.toggle('hidden', currentTab !== 'chat' || !hasEvent || !canAccessCommunity);
   $('#photos-view').classList.toggle('hidden', currentTab !== 'photos' || !hasEvent || !canAccessCommunity);
-  $('#inbox-view').classList.toggle('hidden', currentTab !== 'inbox');
   $$('.sidebar .nav-link[data-tab]').forEach(button => button.classList.toggle('active', button.dataset.tab === currentTab));
   if (['chat', 'photos'].includes(currentTab)) loadCommunity();
   if (options.highlight) highlightNotificationTarget(options.notification, currentTab);
@@ -1493,17 +1492,6 @@ function setTab(tab, options = {}) {
     viewSectionChanges(currentTab);
     markSectionViewed(currentTab);
     renderNotifications();
-  }
-  if (currentTab === 'inbox' && currentEvent.inviteToken) {
-    const viewerKey = currentEvent.ownerToken
-      ? `organizer:${currentEvent.ownerToken}`
-      : (currentViewerAttendeeId ? `attendee:${currentViewerAttendeeId}` : '');
-    const unreadCount = eventNotifications.filter(notification => !viewerKey || !Array.isArray(notification.readBy) || !notification.readBy.includes(viewerKey)).length;
-    const noticeKey = `organizat.notifications.notice.${currentEvent.inviteToken}`;
-    if (unreadCount > 0 && !localStorage.getItem(noticeKey)) {
-      localStorage.setItem(noticeKey, 'shown');
-      window.setTimeout(() => showToast(`Tienes ${unreadCount} notificación${unreadCount === 1 ? '' : 'es'} pendiente${unreadCount === 1 ? '' : 's'} de leer.`), 120);
-    }
   }
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
@@ -1636,12 +1624,9 @@ $('#photo-input').addEventListener('change', async event => {
 
 $$('[data-tab]').forEach(button => button.addEventListener('click', () => setTab(button.dataset.tab)));
 
-$('.notification-button')?.addEventListener('click', () => setTab('inbox'));
-
 function renderNotifications() {
   const pendingAttendees = attendees.filter(person => person.status === 'Pendiente').length;
   const unassignedTasks = tasks.filter(task => !task.person).length;
-  const notifications = [];
   const viewerKey = currentEvent.ownerToken
     ? `organizer:${currentEvent.ownerToken}`
     : (currentViewerAttendeeId ? `attendee:${currentViewerAttendeeId}` : '');
@@ -1658,66 +1643,6 @@ function renderNotifications() {
   if (unassignedTasksUnread) unreadTabs.add('tasks');
   $('[data-inbox-dot]')?.classList.toggle('visible', unreadCount > 0 || pendingAttendeesUnread || unassignedTasksUnread);
   $$('[data-section-dot]').forEach(dot => dot.classList.toggle('visible', unreadTabs.has(dot.dataset.sectionDot)));
-  const pendingBanner = $('#notification-pending-banner');
-  const pendingText = $('#notification-pending-text');
-  if (pendingBanner && pendingText) {
-    pendingBanner.classList.toggle('hidden', unreadCount === 0);
-    pendingText.textContent = `Tienes ${unreadCount} notificación${unreadCount === 1 ? '' : 'es'} pendiente${unreadCount === 1 ? '' : 's'} de leer.`;
-  }
-
-  eventNotifications.slice().reverse().forEach(notification => {
-    const isUnread = !viewerKey || !Array.isArray(notification.readBy) || !notification.readBy.includes(viewerKey);
-    notifications.push({
-      icon: '!',
-      id: notification.id || '',
-      title: notification.title || 'Evento actualizado',
-      detail: notification.detail || 'Hay cambios nuevos en este evento.',
-       tab: notificationDestinationTab(notification),
-       targetId: notification.targetId || '',
-       targetType: notification.targetType || '',
-      unread: isUnread
-    });
-  });
-
-  if (pendingAttendees) {
-    notifications.push({ icon: '♙', title: `${pendingAttendees} persona${pendingAttendees === 1 ? '' : 's'} por confirmar`, detail: `Revisa quién falta por responder en «${currentEvent.name}».`, tab: 'attendees', unread: pendingAttendeesUnread });
-  }
-  if (unassignedTasks) {
-    notifications.push({ icon: '☷', title: `${unassignedTasks} tarea${unassignedTasks === 1 ? '' : 's'} sin responsable`, detail: 'Asigna lo que falta para que el grupo pueda organizarse.', tab: 'tasks', unread: unassignedTasksUnread });
-  }
-  if (currentEvent.inviteToken) {
-    notifications.push({ icon: '↗', title: 'Invitación activa', detail: 'Las nuevas confirmaciones se sincronizan automáticamente.', tab: 'attendees', unread: false });
-  }
-  if (!notifications.length) {
-    notifications.push({ icon: '✓', title: 'Todo al día', detail: 'No hay avisos pendientes en este momento.', tab: 'overview', unread: false });
-  }
-
-  $('#notifications-list').innerHTML = notifications.map((notification, index) => `
-    <button class="notification-entry ${notification.unread ? 'unread' : ''}" data-notification-index="${index}" data-notification-id="${escapeHtml(notification.id || '')}" data-notification-tab="${notification.tab}">
-      <span class="notification-entry-icon">${notification.icon}</span>
-      <span class="notification-entry-copy"><strong>${escapeHtml(notification.title)}</strong><small>${escapeHtml(notification.detail)}</small></span>
-      <span class="notification-entry-arrow">→</span>
-    </button>
-  `).join('');
-  const markIds = ids => queueNotificationRead(ids);
-  if ('IntersectionObserver' in window) {
-    const observer = new IntersectionObserver(entries => {
-      const visibleIds = entries
-        .filter(entry => entry.isIntersecting && entry.intersectionRatio >= .55)
-        .map(entry => entry.target.dataset.notificationId)
-        .filter(id => id && !notificationReadInProgress.has(id));
-      if (visibleIds.length) {
-        visibleIds.forEach(id => notificationReadInProgress.add(id));
-        markIds(visibleIds);
-      }
-    }, { threshold: .55 });
-    $$('#notifications-list .notification-entry.unread[data-notification-id]').forEach(button => observer.observe(button));
-  }
-  $$('#notifications-list [data-notification-tab]').forEach(button => button.addEventListener('click', () => {
-    const selected = notifications[Number(button.dataset.notificationIndex)];
-    if (button.dataset.notificationId) markIds([button.dataset.notificationId]);
-    setTab(button.dataset.notificationTab, { highlight: true, notification: selected });
-  }));
 }
 
 function queueNotificationRead(ids) {
@@ -1757,8 +1682,6 @@ async function markNotificationsRead() {
     showToast('Notificaciones marcadas como leídas.');
   } catch (error) { showToast(error.message); }
 }
-
-$('#mark-notifications-read').addEventListener('click', markNotificationsRead);
 
 $('#confirm-button').addEventListener('click', async () => {
   const me = attendees.find(person => person.id === currentViewerAttendeeId) || attendees[0];

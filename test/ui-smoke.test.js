@@ -12,10 +12,8 @@ const stylesCss = fs.readFileSync(path.join(projectRoot, 'styles.css'), 'utf8');
 
 test('la interfaz contiene los destinos de mapa y notificaciones', () => {
   assert.match(indexHtml, /class="map-link"/);
-  assert.match(indexHtml, /id="inbox-view"/);
-  assert.match(indexHtml, /id="notifications-list"/);
   assert.match(indexHtml, /id="event-organizer"/);
-  assert.doesNotMatch(indexHtml, /<button[^>]*data-tab="inbox"[^>]*aria-label="Notificaciones"/);
+  assert.doesNotMatch(indexHtml, /id="inbox-view"|id="notifications-list"|data-tab="inbox"/);
 });
 
 test('las novedades se indican con puntos azules en cada apartado', () => {
@@ -46,10 +44,9 @@ test('el enlace de mapa se genera con una búsqueda segura', () => {
   assert.match(appJs, /target="_blank" rel="noopener noreferrer"/);
 });
 
-test('las notificaciones tienen navegación y se actualizan al renderizar', () => {
-  assert.match(appJs, /setTab\('inbox'\)/);
+test('las novedades se actualizan en los puntos del menú', () => {
   assert.match(appJs, /function renderNotifications\(\)/);
-  assert.match(appJs, /data-notification-tab/);
+  assert.match(appJs, /data-section-dot/);
   assert.match(appJs, /renderNotifications\(\);/);
   assert.match(appJs, /touchstart/);
   assert.match(appJs, /touchend/);
