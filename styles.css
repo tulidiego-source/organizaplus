@@ -146,6 +146,12 @@ body { background: var(--canvas); color: var(--ink); }
 .attendance-status { background: #e4f1fa; color: #155b8a; }
 .attendance-status.pending { background: #fff3d9; color: #986312; }
 .chat-message { background: #eaf4fb; }
+.balance-entry .balance-amount { color: #155b8a; }
+.notification-entry.unread { border-left-color: #e2a126; background: #fff8e5; }
+.notification-entry.unread .notification-entry-icon { background: #fff0c8; color: #a96b10; }
+.notification-entry-copy strong { color: #25465e; }
+.notification-entry-copy small { color: #4b647a; }
+.notification-entry-arrow { color: #547087; }
 .chat-message-heading strong { color: #155b8a; }
 .chat-message-heading small, .chat-message p { color: #294b64; }
 .community-form { border-top-color: #d4e1ec; }
@@ -153,6 +159,26 @@ body { background: var(--canvas); color: var(--ink); }
 .expense-symbol { background: #fff2d8; color: #a96b10; }
 .expense-total-card span, .expense-total-card small, .expense-entry-copy small, .balance-entry .owes-note { color: #4b647a; }
 .share-total { background: #edf5fb; }
+.brand, .profile-copy strong, .help-card strong, .hero-title-row h1, .wizard-heading h2, .modal-form h2 { color: #172f46; }
+.brand-mark { background: #155b8a; }
+.brand-mark span, .brand-plus { color: #f2b84b; }
+.confirm-button.confirmed { background: #e6f1f9; color: #155b8a; }
+.avatar-c { background: #cfe5f3; }
+.event-permissions, .push-settings, .help-card { border-color: #d4e1ec; background: #f7fbfe; }
+.event-permissions, .push-settings, .help-card p, .form-section-label, .profile-copy small { color: #4b647a; }
+.event-actions-modal h2, .delete-confirm-modal h2, .crop-form h2 { color: #172f46; }
+.event-actions-modal p, .delete-confirm-modal p, .crop-form p, .empty-hint, .form-hint { color: #4b647a; }
+.invite-chip, .join-account-status, .wizard-note { border-color: #c8ddeb; background: #edf7fd; color: #315872; }
+.wizard-note span { color: #155b8a; }
+.wizard-step-indicator.active, .add-wizard-row, .wizard-vote-option:has(input:checked) { color: #155b8a; }
+.wizard-step-indicator.active span, .wizard-step-indicator.complete span { border-color: #155b8a; background: #155b8a; }
+.wizard-vote-option:has(input:checked) { border-color: #a9cde5; background: #edf7fd; }
+.auth-toggle, .auth-forgot { color: #155b8a; }
+.image-choice.selected { border-color: #155b8a; box-shadow: 0 0 0 2px #cfe5f3; }
+.image-upload-button, .invite-link-box button { border-color: #bfd5e5; background: #edf7fd; color: #155b8a; }
+.crop-form input[type="range"], .checkbox-label input, .wizard-vote-option input { accent-color: #155b8a; }
+.join-account-status { color: #155b8a !important; }
+.chat-message { background: #eaf4fb; }
 .modal-form p, .wizard-heading p, .modal-form label, .wizard-panel > label { color: #4b647a; }
 .modal-form input, .modal-form select, .modal-form textarea { border-color: #bfd5e5; color: #172f46; }
 .modal-form input:focus, .modal-form select:focus, .modal-form textarea:focus { border-color: #4c9acc; box-shadow: 0 0 0 3px rgba(48, 137, 190, .16); }
