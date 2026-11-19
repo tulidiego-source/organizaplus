@@ -27,6 +27,13 @@ test('las novedades se indican con puntos azules en cada apartado', () => {
   assert.match(stylesCss, /\.section-notification-dot \{ background: #2f8ac1; \}/);
 });
 
+test('el menú no deja una sección vacía y conserva la paleta azul y amarilla', () => {
+  assert.doesNotMatch(indexHtml, /<div class="workspace-label">TU ESPACIO<\/div>/);
+  assert.match(stylesCss, /\.sidebar-create-button \{ border-color: #bfd5e5; background: #edf7fd; color: #155b8a; \}/);
+  assert.match(stylesCss, /\.notification-pending \{ border-color: #e3c46d; background: #fff8e5; color: #76530f; \}/);
+  assert.match(stylesCss, /\.help-spark \{ background: #fff3d9; color: #a96b10; \}/);
+});
+
 test('el enlace de mapa se genera con una búsqueda segura', () => {
   assert.match(appJs, /https:\/\/www\.google\.com\/maps\/search\/\?api=1&query=/);
   assert.match(appJs, /encodeURIComponent\(currentEvent\.location\)/);

@@ -193,6 +193,21 @@ button, .nav-link, .icon-button, .task-purchased, .task-check, .attendee-delete-
 .expense-total-card span, .expense-total-card small, .expense-entry-copy small, .balance-entry .owes-note { color: #4b647a; }
 .share-total { background: #edf5fb; }
 .section-notification-dot { background: #2f8ac1; }
+.event-label { margin-top: 28px; }
+.sidebar-create-button { border-color: #bfd5e5; background: #edf7fd; color: #155b8a; }
+.sidebar-create-button:hover { border-color: #86b9d9; background: #e2f2fc; }
+.help-card { border-color: #d4e1ec; background: #f7fbfe; }
+.help-spark { background: #fff3d9; color: #a96b10; }
+.notification-pending { border-color: #e3c46d; background: #fff8e5; color: #76530f; }
+.notification-pending .text-button { color: #986312; }
+.push-settings { border-color: #d4e1ec; background: #f7fbfe; }
+.locked-field { background: #f1f6fa !important; color: #526f86 !important; }
+.task-purchased.done { border-color: #e3ad3b; background: #fff3d5; color: #8e5b0c; }
+.task-purchased:not(.done):hover { border-color: #86b9d9; background: #edf7fd; color: #155b8a; }
+.invite-link-box button { background: #edf7fd; color: #155b8a; }
+.image-upload-button { border-color: #bfd5e5; background: #edf7fd; color: #155b8a; }
+.wizard-vote-option:has(input:checked) { border-color: #e3c46d; background: #fff8e5; color: #76530f; }
+.wizard-step-indicator.active, .add-wizard-row { color: #155b8a; }
 .brand, .profile-copy strong, .help-card strong, .hero-title-row h1, .wizard-heading h2, .modal-form h2 { color: #172f46; }
 .brand-mark { background: #155b8a; }
 .brand-mark span, .brand-plus { color: #f2b84b; }
