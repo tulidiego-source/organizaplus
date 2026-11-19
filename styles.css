@@ -208,6 +208,52 @@ button, .nav-link, .icon-button, .task-purchased, .task-check, .attendee-delete-
 .image-upload-button { border-color: #bfd5e5; background: #edf7fd; color: #155b8a; }
 .wizard-vote-option:has(input:checked) { border-color: #e3c46d; background: #fff8e5; color: #76530f; }
 .wizard-step-indicator.active, .add-wizard-row { color: #155b8a; }
+
+/* Paleta final: ningún componente de interfaz usa verdes heredados. */
+.event-gallery-card { border-color: #d4e1ec; background: #fff; }
+.event-gallery-card:hover, .event-gallery-card.active { border-color: #86b9d9; background: #edf7fd; }
+.event-card-indicator, .event-gallery-card:not(.active) .event-card-indicator { background: #e4f1fa; color: #155b8a; }
+.event-card-copy h3 { color: #25465e; }
+.event-card-copy small { color: #4d687e; }
+.hero-image, .hero-image.event-image-selected { background-color: #dcecf7; }
+.hero-image::before, .hero-image::after { border-color: rgba(32, 91, 130, .16); }
+.hero-sticker { color: #245b7c; border-color: rgba(32, 91, 130, .25); }
+.hero-sticker span, .event-organizer { color: #155b8a; }
+.art-grill { border-color: #244b69; background: #315d7c; }
+.art-grill::before, .art-grill::after { background: #244b69; }
+.art-leaf { color: #2f8ac1; }
+.kicker-dot { background: #2f8ac1; }
+.confirm-button.confirmed { border: 1px solid #bfd5e5; background: #e6f1f9; color: #155b8a; }
+.confirm-button:hover { background: #0d456b; }
+.people-icon { background: #e4f1fa; color: #155b8a; }
+.list-icon { background: #fff3d9; color: #a96b10; }
+.money-icon { background: #e9f0fb; color: #416da2; }
+.green-dot { background: #2f8ac1; }
+.orange-dot { background: #d99a27; }
+.task-check.done, .task-check-static { border-color: #2f8ac1; background: #e4f1fa; color: #155b8a; }
+.task-purchased.done { border-color: #e3ad3b; background: #fff3d5; color: #8e5b0c; }
+.task-row-mine { background: #e8f4fb; }
+.task-filter, .task-assignee { border-color: #b9d4e7; background: #f5faff; color: #155b8a; }
+.add-inline-button, .compact-action-button { border-color: #b8d5e8; background: #edf7fd; color: #155b8a; }
+.add-inline-button > span:first-child, .action-icon { background: #d3eafa; color: #155b8a; }
+.date-option:hover, .date-option.selected, .single-date-confirmed { border-color: #a9cde5; background: #eff8fd; }
+.single-date-badge { background: #e5f1fb; color: #155b8a; }
+.attendance-status { background: #e4f1fa; color: #155b8a; }
+.attendance-status.pending { background: #fff3d9; color: #986312; }
+.chat-message { border-color: #c8ddeb; background: #eaf4fb; }
+.chat-message-heading strong { color: #155b8a; }
+.chat-message-heading small, .chat-message p { color: #294b64; }
+.expense-symbol { background: #fff2d8; color: #a96b10; }
+.share-total { background: #edf5fb; }
+.invite-chip, .join-account-status, .wizard-note { border-color: #c8ddeb; background: #edf7fd; color: #315872; }
+.wizard-note span { color: #155b8a; }
+.image-choice { background-color: #eef5fa; }
+.image-choice.selected { border-color: #155b8a; box-shadow: 0 0 0 2px #cfe5f3; }
+.custom-image-choice span { background: #155b8a; }
+.image-upload-button { border-color: #bfd5e5; background: #edf7fd; color: #155b8a; }
+.crop-frame { background: #eaf4fb; }
+.wizard-step-indicator.active span, .wizard-step-indicator.complete span { border-color: #155b8a; background: #155b8a; }
+.wizard-vote-option:has(input:checked) { border-color: #e3c46d; background: #fff8e5; color: #76530f; }
 .brand, .profile-copy strong, .help-card strong, .hero-title-row h1, .wizard-heading h2, .modal-form h2 { color: #172f46; }
 .brand-mark { background: #155b8a; }
 .brand-mark span, .brand-plus { color: #f2b84b; }

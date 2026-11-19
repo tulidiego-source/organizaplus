@@ -38,6 +38,15 @@ test('el menú usa iconos intuitivos para asistentes, compras y chat', () => {
   assert.match(indexHtml, /data-tab="chat"[^>]*>[\s\S]*💬/);
 });
 
+test('los componentes principales no recuperan fondos verdes', () => {
+  assert.match(stylesCss, /\.confirm-button\.confirmed \{ border: 1px solid #bfd5e5; background: #e6f1f9; color: #155b8a; \}/);
+  assert.match(stylesCss, /\.add-inline-button, \.compact-action-button \{ border-color: #b8d5e8; background: #edf7fd; color: #155b8a; \}/);
+  assert.match(stylesCss, /\.date-option:hover, \.date-option\.selected, \.single-date-confirmed \{ border-color: #a9cde5; background: #eff8fd; \}/);
+  assert.match(stylesCss, /\.attendance-status \{ background: #e4f1fa; color: #155b8a; \}/);
+  assert.match(stylesCss, /\.task-filter, \.task-assignee \{ border-color: #b9d4e7; background: #f5faff; color: #155b8a; \}/);
+  assert.match(stylesCss, /\.chat-message \{ border-color: #c8ddeb; background: #eaf4fb; \}/);
+});
+
 test('el enlace de mapa se genera con una búsqueda segura', () => {
   assert.match(appJs, /https:\/\/www\.google\.com\/maps\/search\/\?api=1&query=/);
   assert.match(appJs, /encodeURIComponent\(currentEvent\.location\)/);
