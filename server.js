@@ -4,7 +4,18 @@ const crypto = require('node:crypto');
 const fs = require('node:fs/promises');
 const fsSync = require('node:fs');
 const http = require('node:http');
+const https = require('node:https');
 const path = require('node:path');
+const {
+  HttpError,
+  Invitation,
+  ChatMessage,
+  Photo,
+  cleanText,
+  isValidDate,
+  isValidTime,
+  normalizeImageData
+} = require('./models');
 
 const rootDirectory = __dirname;
 const envFilePath = path.join(rootDirectory, '.env');
@@ -30,165 +41,13 @@ const allowedStaticFiles = new Map([
   ['/icon.svg', ['icon.svg', 'image/svg+xml']]
 ]);
 
-class HttpError extends Error {
-  constructor(status, message) {
-    super(message);
-    this.status = status;
-  }
-}
-
-function isValidDate(value) {
-  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
-  const parsed = new Date(`${value}T00:00:00.000Z`);
-  return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
-}
-
-function isValidTime(value) {
-  if (typeof value !== 'string' || !/^\d{2}:\d{2}$/.test(value)) return false;
-  const [hours, minutes] = value.split(':').map(Number);
-  return hours <= 23 && minutes <= 59;
-}
-
-function cleanText(value, field, maximumLength, required = true) {
-  if (typeof value !== 'string') {
-    if (!required && value == null) return '';
-    throw new HttpError(400, `${field} no es válido.`);
-  }
-  const cleaned = value.replace(/[\u0000-\u001f\u007f]/g, ' ').trim();
-  if ((required && !cleaned) || cleaned.length > maximumLength) {
-    throw new HttpError(400, `${field} debe tener entre 1 y ${maximumLength} caracteres.`);
-  }
-  return cleaned;
-}
-
-function normalizeImageData(value, field) {
-  if (value === undefined || value === '') return '';
-  if (typeof value !== 'string' || value.length > 700000 || !/^data:image\/(?:jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/.test(value)) {
-    throw new HttpError(400, `${field} no es válida.`);
-  }
-  return value;
-}
-
-function normalizeAttendees(input) {
-  if (!Array.isArray(input) || input.length > 200) {
-    throw new HttpError(400, 'La lista de asistentes no es válida.');
-  }
-  return input.map((person, index) => {
-    if (!person || typeof person !== 'object') {
-      throw new HttpError(400, 'Hay un asistente no válido.');
-    }
-    const name = cleanText(person.name, 'El nombre del asistente', 60);
-    const allowedStatuses = ['Confirmado', 'Confirmada', 'Pendiente', 'Cancelado'];
-    if (!allowedStatuses.includes(person.status)) throw new HttpError(400, 'El estado de asistencia no es válido.');
-    const status = person.status;
-    const role = typeof person.role === 'string' ? cleanText(person.role, 'El rol', 40, false) : 'Participante';
-    const adults = Number.isInteger(person.adults) && person.adults >= 1 && person.adults <= 50 ? person.adults : 1;
-    const children = Number.isInteger(person.children) && person.children >= 0 && person.children <= 50 ? person.children : 0;
-    const initial = Array.from(name)[0].toLocaleUpperCase('es-ES');
-    const color = /^#[\da-f]{6}$/i.test(person.color || '') ? person.color : '#c4d6c0';
-    return {
-      name,
-      initial,
-      role: role || 'Participante',
-      status,
-      adults,
-      children,
-      color,
-      ...(typeof person.email === 'string' ? { email: person.email.slice(0, 254).trim().toLowerCase() } : {}),
-      id: typeof person.id === 'string' ? person.id : `initial-${index}`,
-      privateToken: typeof person.privateToken === 'string' ? person.privateToken : crypto.randomBytes(24).toString('base64url'),
-      ...(typeof person.accountUserId === 'string' ? { accountUserId: person.accountUserId } : {})
-    };
-  });
-}
-
-function attendeeHeadcount(attendees) {
-  return attendees.reduce((total, person) => total + (['Confirmado', 'Confirmada'].includes(person.status) ? (person.adults || 1) + (person.children || 0) : 0), 0);
-}
-
-function normalizeTasks(input) {
-  if (!Array.isArray(input) || input.length > 100) {
-    throw new HttpError(400, 'La lista de tareas no es válida.');
-  }
-  return input.map(task => {
-    if (!task || typeof task !== 'object') throw new HttpError(400, 'Hay una tarea no válida.');
-    if (typeof task.done !== 'boolean') throw new HttpError(400, 'El estado de una tarea no es válido.');
-    return {
-      name: cleanText(task.name, 'El nombre de la tarea', 80),
-      quantity: cleanText(task.quantity || '', 'La cantidad', 40, false),
-      person: cleanText(task.person || '', 'El responsable', 60, false),
-      done: task.done,
-      purchased: typeof task.purchased === 'boolean' ? task.purchased : task.done,
-      id: typeof task.id === 'string' ? task.id : crypto.randomUUID(),
-      proposalStatus: task.proposalStatus === 'proposed' ? 'proposed' : 'accepted',
-      ...(typeof task.proposedBy === 'string' ? { proposedBy: task.proposedBy } : {})
-    };
-  });
-}
-
-function normalizeDateOptions(input) {
-  if (!Array.isArray(input) || input.length > 20) {
-    throw new HttpError(400, 'Las opciones de fecha no son válidas.');
-  }
-  return input.map(option => {
-    if (!option || !isValidDate(option.date) || !isValidTime(option.time)) {
-      throw new HttpError(400, 'Una fecha u hora propuesta no es válida.');
-    }
-    if (!Number.isInteger(option.votes) || option.votes < 0) {
-      throw new HttpError(400, 'El número de votos no es válido.');
-    }
-    return {
-      date: option.date,
-      time: option.time,
-      votes: option.votes
-    };
-  });
-}
-
-function normalizeExpenses(input) {
-  if (!Array.isArray(input) || input.length > 200) {
-    throw new HttpError(400, 'La lista de gastos no es válida.');
-  }
-  return input.map(expense => {
-    if (!expense || typeof expense !== 'object' || !Number.isFinite(Number(expense.amount)) || Number(expense.amount) <= 0) {
-      throw new HttpError(400, 'Hay un gasto no válido.');
-    }
-    return {
-      name: cleanText(expense.name, 'El concepto del gasto', 80),
-      amount: Math.round(Number(expense.amount) * 100) / 100,
-      person: cleanText(expense.person, 'La persona que pagó', 60),
-      date: cleanText(expense.date || '', 'La fecha del gasto', 40, false)
-    };
-  });
-}
-
-function normalizeChatMessages(input) {
-  if (!Array.isArray(input) || input.length > 1000) throw new HttpError(400, 'El chat no es válido.');
-  return input.map(message => ({
-    id: typeof message.id === 'string' ? message.id : crypto.randomUUID(),
-    authorId: cleanText(message.authorId || '', 'El autor del mensaje', 100),
-    authorName: cleanText(message.authorName, 'El nombre del autor', 60),
-    text: cleanText(message.text, 'El mensaje', 500),
-    createdAt: typeof message.createdAt === 'string' ? message.createdAt : new Date().toISOString()
-  }));
-}
-
-function normalizePhotos(input) {
-  if (!Array.isArray(input) || input.length > 200) throw new HttpError(400, 'El álbum no es válido.');
-  return input.map(photo => {
-    if (!photo || typeof photo !== 'object' || typeof photo.data !== 'string' || !/^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/.test(photo.data) || photo.data.length > 2_500_000) {
-      throw new HttpError(400, 'La foto no es válida o pesa demasiado.');
-    }
-    return {
-      id: typeof photo.id === 'string' ? photo.id : crypto.randomUUID(),
-      authorId: cleanText(photo.authorId || '', 'El autor de la foto', 100),
-      authorName: cleanText(photo.authorName, 'El nombre del autor', 60),
-      name: cleanText(photo.name || 'Foto del evento', 'El nombre de la foto', 120, false) || 'Foto del evento',
-      data: photo.data,
-      createdAt: typeof photo.createdAt === 'string' ? photo.createdAt : new Date().toISOString()
-    };
-  });
-}
+const normalizeAttendees = Invitation.attendees;
+const normalizeTasks = Invitation.tasks;
+const normalizeDateOptions = Invitation.dateOptions;
+const normalizeExpenses = Invitation.expenses;
+const normalizeChatMessages = Invitation.chatMessages;
+const normalizePhotos = Invitation.photos;
+const attendeeHeadcount = Invitation.headcount;
 
 function publicAttendees(attendees) {
   return attendees.map(({ email, privateToken, accountUserId, ...person }) => person);
@@ -232,7 +91,8 @@ function publicInvitation(record, request) {
     dateOptions: record.dateOptions,
     expenses: record.expenses || [],
     notifications,
-    unreadNotifications: unreadNotifications(notifications, viewerKey)
+    unreadNotifications: unreadNotifications(notifications, viewerKey),
+    ...(viewer ? { viewerAttendeeId: viewer.id } : {})
   };
 }
 
@@ -287,6 +147,24 @@ function hashSessionToken(token) {
   return crypto.createHash('sha256').update(token).digest('hex');
 }
 
+function escapeHtml(value) {
+  return String(value).replace(/[&<>\"']/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '\"': '&quot;', "'": '&#39;' }[character]));
+}
+
+function sendResendEmail({ apiKey, from, to, subject, html }) {
+  return new Promise((resolve, reject) => {
+    const body = Buffer.from(JSON.stringify({ from, to: [to], subject, html }));
+    const emailRequest = https.request({ hostname: 'api.resend.com', path: '/emails', method: 'POST', headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json', 'Content-Length': body.length } }, response => {
+      let responseBody = '';
+      response.setEncoding('utf8');
+      response.on('data', chunk => { responseBody += chunk; });
+      response.on('end', () => response.statusCode >= 200 && response.statusCode < 300 ? resolve() : reject(new Error(`Resend respondió ${response.statusCode}: ${responseBody.slice(0, 300)}`)));
+    });
+    emailRequest.on('error', reject);
+    emailRequest.end(body);
+  });
+}
+
 function sessionCookie(token, maxAge = sessionDurationSeconds) {
   return `organizat_session=${encodeURIComponent(token)}; HttpOnly; Path=/; SameSite=Lax; Max-Age=${maxAge}`;
 }
@@ -331,6 +209,8 @@ function getPublicBaseUrl(request, configuredBaseUrl) {
 }
 
 function createEventRecord(body, ownerUserId = null) {
+  return Invitation.create(body, ownerUserId);
+/*
   if (!body || typeof body !== 'object' || !/^[A-Za-z0-9_-]{1,80}$/.test(body.clientEventId || '')) {
     throw new HttpError(400, 'El identificador del evento no es válido.');
   }
@@ -380,6 +260,7 @@ function createEventRecord(body, ownerUserId = null) {
     notifications: [],
     createdAt: new Date().toISOString()
   };
+*/
 }
 
 function createAppServer(options = {}) {
@@ -409,6 +290,8 @@ function createAppServer(options = {}) {
   const vapidPrivateKey = process.env.VAPID_PRIVATE_KEY || '';
   const vapidSubject = process.env.VAPID_SUBJECT || 'mailto:organizat@example.com';
   if (webpush && vapidPublicKey && vapidPrivateKey) webpush.setVapidDetails(vapidSubject, vapidPublicKey, vapidPrivateKey);
+  const resendApiKey = process.env.RESEND_API_KEY || '';
+  const emailFrom = process.env.EMAIL_FROM || '';
 
   async function getAuthenticatedUser(request) {
     if (!pool) return null;
@@ -494,6 +377,17 @@ function eventForAuthenticatedUser(record, request, user) {
           token_hash TEXT PRIMARY KEY,
           user_id TEXT NOT NULL REFERENCES organizers(id) ON DELETE CASCADE,
           expires_at TIMESTAMPTZ NOT NULL
+        )
+      `);
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS password_reset_codes (
+          id BIGSERIAL PRIMARY KEY,
+          user_id TEXT NOT NULL REFERENCES organizers(id) ON DELETE CASCADE,
+          code_hash TEXT NOT NULL,
+          expires_at TIMESTAMPTZ NOT NULL,
+          attempts INTEGER NOT NULL DEFAULT 0,
+          used_at TIMESTAMPTZ,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
         )
       `);
       await pool.query(`
@@ -736,6 +630,73 @@ function eventForAuthenticatedUser(record, request, user) {
       return;
     }
 
+    if (request.method === 'POST' && url.pathname === '/api/auth/forgot-password') {
+      if (!pool) throw new HttpError(503, 'La recuperación de contraseña necesita DATABASE_URL configurado.');
+      if (!resendApiKey || !emailFrom) throw new HttpError(503, 'El envío de correos todavía no está configurado.');
+      const body = await readJsonBody(request);
+      const email = normalizeEmail(body && body.email);
+      const result = await pool.query('SELECT id, name FROM organizers WHERE email = $1', [email]);
+      if (result.rows[0]) {
+        await pool.query('UPDATE password_reset_codes SET used_at = NOW() WHERE user_id = $1 AND used_at IS NULL', [result.rows[0].id]);
+        const code = String(crypto.randomInt(100000, 1000000));
+        await pool.query(
+          'INSERT INTO password_reset_codes (user_id, code_hash, expires_at) VALUES ($1, $2, NOW() + INTERVAL \'10 minutes\')',
+          [result.rows[0].id, hashSessionToken(code)]
+        );
+        try {
+          await sendResendEmail({
+            apiKey: resendApiKey,
+            from: emailFrom,
+            to: email,
+            subject: 'Tu código para recuperar la contraseña de OrganizaT',
+            html: `<p>Hola ${escapeHtml(result.rows[0].name)},</p><p>Tu código para cambiar la contraseña es:</p><p style="font-size:28px;font-weight:700;letter-spacing:6px">${code}</p><p>Caduca en 10 minutos. Si no lo has solicitado, puedes ignorar este correo.</p>`
+          });
+        } catch (error) {
+          console.error('No se pudo enviar el código de recuperación.', error.message);
+          throw new HttpError(502, 'No se pudo enviar el correo de recuperación.');
+        }
+      }
+      sendJson(response, 200, { message: 'Si existe una cuenta con ese correo, recibirás un código en unos minutos.' });
+      return;
+    }
+
+    if (request.method === 'POST' && url.pathname === '/api/auth/reset-password') {
+      if (!pool) throw new HttpError(503, 'La recuperación de contraseña necesita DATABASE_URL configurado.');
+      const body = await readJsonBody(request);
+      const email = normalizeEmail(body && body.email);
+      const code = typeof body?.code === 'string' ? body.code.trim() : '';
+      if (!/^\d{6}$/.test(code)) throw new HttpError(400, 'El código debe tener 6 cifras.');
+      const password = validatePassword(body && body.password);
+      const result = await pool.query(`
+        SELECT r.id, r.user_id, r.attempts
+        FROM password_reset_codes r JOIN organizers o ON o.id = r.user_id
+        WHERE o.email = $1 AND r.used_at IS NULL AND r.expires_at > NOW()
+        ORDER BY r.created_at DESC LIMIT 1
+      `, [email]);
+      const reset = result.rows[0];
+      const validCode = reset && reset.attempts < 5 && crypto.timingSafeEqual(Buffer.from(hashSessionToken(code)), Buffer.from(reset.code_hash));
+      if (!validCode) {
+        if (reset) await pool.query('UPDATE password_reset_codes SET attempts = attempts + 1 WHERE id = $1', [reset.id]);
+        throw new HttpError(400, 'El código no es válido o ha caducado.');
+      }
+      const passwordHash = await hashPassword(password);
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+        await client.query('UPDATE organizers SET password_hash = $1 WHERE id = $2', [passwordHash, reset.user_id]);
+        await client.query('UPDATE password_reset_codes SET used_at = NOW() WHERE id = $1', [reset.id]);
+        await client.query('DELETE FROM organizer_sessions WHERE user_id = $1', [reset.user_id]);
+        await client.query('COMMIT');
+      } catch (error) {
+        await client.query('ROLLBACK');
+        throw error;
+      } finally {
+        client.release();
+      }
+      sendJson(response, 200, { message: 'Contraseña actualizada. Ya puedes iniciar sesión.' });
+      return;
+    }
+
     if (request.method === 'PATCH' && url.pathname === '/api/auth/profile') {
       if (!pool) throw new HttpError(503, 'La edición del perfil necesita DATABASE_URL configurado.');
       const user = await getAuthenticatedUser(request);
@@ -931,7 +892,7 @@ function eventForAuthenticatedUser(record, request, user) {
           const text = cleanText(body && body.text, 'El mensaje', 500);
           const authorId = viewer.organizer ? `organizer:${record.ownerToken}` : viewer.attendee.id;
           const authorName = viewer.organizer ? (record.attendees[0]?.name || 'Organizador') : viewer.attendee.name;
-          const message = { id: crypto.randomUUID(), authorId, authorName, text, createdAt: new Date().toISOString() };
+          const message = ChatMessage.from({ authorId, authorName, text });
           record.chatMessages = normalizeChatMessages([...(record.chatMessages || []), message]).slice(-1000);
           pushNotification = {
             id: crypto.randomUUID(), audience: 'all', targetId: message.id, targetType: 'chat', title: 'Nuevo mensaje en el chat',
@@ -942,7 +903,7 @@ function eventForAuthenticatedUser(record, request, user) {
           if (!body || typeof body.data !== 'string') throw new HttpError(400, 'Selecciona una imagen.');
           const authorId = viewer.organizer ? `organizer:${record.ownerToken}` : viewer.attendee.id;
           const authorName = viewer.organizer ? (record.attendees[0]?.name || 'Organizador') : viewer.attendee.name;
-          const photo = { id: crypto.randomUUID(), authorId, authorName, name: body.name || 'Foto del evento', data: body.data, createdAt: new Date().toISOString() };
+          const photo = Photo.from({ authorId, authorName, name: body.name || 'Foto del evento', data: body.data });
           record.photos = normalizePhotos([...(record.photos || []), photo]).slice(-200);
           pushNotification = {
             id: crypto.randomUUID(), audience: 'all', targetId: photo.id, targetType: 'photo', title: 'Nueva foto del evento',
@@ -1077,7 +1038,7 @@ function eventForAuthenticatedUser(record, request, user) {
         const previousTasks = JSON.stringify(record.tasks);
         const previousTaskById = new Map(record.tasks.map(task => [task.id, task]));
         record.tasks = normalizeTasks(body && body.tasks);
-        if (record.tasks.some(task => task.person && !record.attendees.some(person => ['Confirmado', 'Confirmada'].includes(person.status) && person.name === task.person))) {
+        if (record.tasks.some(task => task.person && !record.attendees.some(person => ['Confirmado', 'Confirmada'].includes(person.status) && (person.id === task.personId || person.name === task.person)))) {
           throw new HttpError(400, 'Una tarea está asignada a una persona que no pertenece al evento.');
         }
         record.dateOptions = normalizeDateOptions(body && body.dateOptions);
@@ -1156,19 +1117,23 @@ function eventForAuthenticatedUser(record, request, user) {
         } else if (body && body.action === 'claim') {
           if (!attendee || !['Confirmado', 'Confirmada'].includes(attendee.status)) throw new HttpError(403, 'Solo los asistentes confirmados pueden asignarse tareas.');
           task.person = attendee.name;
+          task.personId = attendee.id;
           record.notifications = [...(record.notifications || []), { id: crypto.randomUUID(), audience: 'all', targetId: task.id, targetType: 'task', title: 'Tarea asignada', detail: `${attendee.name} se encarga de «${task.name}».`, createdAt: new Date().toISOString() }];
         } else if (body && body.action === 'purchase') {
-          if (!isOrganizer && (!attendee || !['Confirmado', 'Confirmada'].includes(attendee.status) || task.person !== attendee.name)) throw new HttpError(403, 'Solo la persona encargada o el organizador pueden marcar una compra.');
+          if (!isOrganizer && (!attendee || !['Confirmado', 'Confirmada'].includes(attendee.status) || (task.personId ? task.personId !== attendee.id : task.person !== attendee.name))) throw new HttpError(403, 'Solo la persona encargada o el organizador pueden marcar una compra.');
           const wasPurchased = task.purchased === true || task.done === true;
           task.purchased = !wasPurchased;
           task.done = task.purchased;
           record.notifications = [...(record.notifications || []), { id: crypto.randomUUID(), audience: 'all', targetId: task.id, targetType: 'task', title: task.purchased ? 'Cosa comprada' : 'Compra pendiente', detail: task.purchased ? `«${task.name}» ya está comprada.` : `«${task.name}» vuelve a estar pendiente de compra.`, createdAt: new Date().toISOString() }];
         } else if (isOrganizer) {
           const requestedPerson = typeof body.person === 'string' ? body.person : task.person;
-          if (requestedPerson && !record.attendees.some(person => ['Confirmado', 'Confirmada'].includes(person.status) && person.name === requestedPerson)) {
+          const assignedAttendee = requestedPerson && record.attendees.find(person => ['Confirmado', 'Confirmada'].includes(person.status) && person.name === requestedPerson);
+          if (requestedPerson && !assignedAttendee) {
             throw new HttpError(400, 'La persona asignada no pertenece al evento.');
           }
           task.person = requestedPerson;
+          if (assignedAttendee) task.personId = assignedAttendee.id;
+          else delete task.personId;
           task.done = typeof body.done === 'boolean' ? body.done : task.done;
           record.notifications = [...(record.notifications || []), { id: crypto.randomUUID(), audience: 'all', targetId: task.id, targetType: 'task', title: task.person ? 'Tarea asignada' : 'Tarea liberada', detail: task.person ? `«${task.name}» la hará ${task.person}.` : `«${task.name}» vuelve a estar pendiente de asignar.`, createdAt: new Date().toISOString() }];
         } else {

@@ -46,6 +46,10 @@ $env:HOST = "0.0.0.0"
 npm start
 ```
 
+### Recuperación de contraseña
+
+La pantalla de inicio de sesión incluye «¿Has olvidado tu contraseña?». El servidor genera un código de 6 cifras válido durante 10 minutos, lo almacena de forma hasheada y lo envía mediante Resend. Para activarlo en producción configura `RESEND_API_KEY` y `EMAIL_FROM`; el dominio de `EMAIL_FROM` debe estar verificado en Resend.
+
 ## Probar
 
 ```powershell

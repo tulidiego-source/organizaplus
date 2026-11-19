@@ -53,6 +53,7 @@ let communityMessages = [];
 let eventPhotos = [];
 let communityLoading = false;
 let communityLoadedToken = '';
+let communityLoadedViewerKey = '';
 const notificationReadInProgress = new Set();
 const pendingNotificationReadIds = new Set();
 let notificationReadTimer = null;
@@ -580,12 +581,22 @@ async function loadOwnedEvents() {
 function setAuthMode(mode) {
   authMode = mode;
   const registering = mode === 'register';
-  $('#auth-title').textContent = registering ? 'Crea tu cuenta' : 'Inicia sesión';
-  $('#auth-description').textContent = registering ? 'Guarda tus eventos y accede a ellos desde cualquier dispositivo.' : 'Accede a tus eventos desde cualquier dispositivo.';
+  const requestingReset = mode === 'forgot-request';
+  const resetting = mode === 'forgot-reset';
+  $('#auth-title').textContent = registering ? 'Crea tu cuenta' : requestingReset ? 'Recupera tu contraseña' : resetting ? 'Cambia tu contraseña' : 'Inicia sesión';
+  $('#auth-description').textContent = registering ? 'Guarda tus eventos y accede a ellos desde cualquier dispositivo.' : requestingReset ? 'Te enviaremos un código de 6 cifras a tu correo.' : resetting ? 'Introduce el código que recibiste y elige una contraseña nueva.' : 'Accede a tus eventos desde cualquier dispositivo.';
   $$('.auth-name-field').forEach(field => field.classList.toggle('hidden', !registering));
+  $('.auth-reset-fields').classList.toggle('hidden', !resetting);
+  $('#auth-password').classList.toggle('hidden', requestingReset || resetting);
+  $('#auth-password').previousElementSibling.classList.toggle('hidden', requestingReset || resetting);
+  $('#auth-password').required = !requestingReset && !resetting;
+  $('#auth-new-password').required = resetting;
+  $('#auth-code').required = resetting;
   $('#auth-name').required = registering;
   $('#auth-password').autocomplete = registering ? 'new-password' : 'current-password';
-  $('#auth-submit').innerHTML = registering ? 'Crear cuenta <span>✓</span>' : 'Entrar <span>→</span>';
+  $('#auth-submit').innerHTML = registering ? 'Crear cuenta <span>✓</span>' : requestingReset ? 'Enviar código <span>→</span>' : resetting ? 'Guardar contraseña <span>✓</span>' : 'Entrar <span>→</span>';
+  $('#auth-forgot').classList.toggle('hidden', registering || requestingReset || resetting);
+  $('#auth-toggle').classList.toggle('hidden', requestingReset || resetting);
   $('#auth-toggle').textContent = registering ? '¿Ya tienes cuenta? Inicia sesión' : '¿No tienes cuenta? Regístrate';
   $('#auth-feedback').textContent = '';
 }
@@ -876,6 +887,7 @@ async function refreshRemoteAttendees(showError = false) {
     currentEvent = { ...currentEvent, ...(invitation.event || {}) };
     eventTemplates = eventTemplates.map(event => event.id === currentEvent.id ? currentEvent : event);
     const refreshedAttendees = invitation.attendees;
+    if (invitation.viewerAttendeeId) currentViewerAttendeeId = invitation.viewerAttendeeId;
     tasks = invitation.tasks;
     dateOptions = invitation.dateOptions;
     expenses = invitation.expenses || [];
@@ -969,7 +981,7 @@ function initials(name) {
 function renderTaskRow(task, index, interactive = false) {
   const viewer = attendees.find(person => person.id === currentViewerAttendeeId);
   const viewerName = viewer?.name || (currentEvent.ownerToken ? attendees.find(person => person.role === 'Organizador')?.name : authUser?.name) || '';
-  const isMine = Boolean(task.person && viewerName && task.person === viewerName);
+  const isMine = Boolean(task.person && ((task.personId && viewer?.id === task.personId) || (viewerName && task.person === viewerName)));
   const purchased = task.purchased === true || task.done === true;
   const canMarkPurchased = Boolean(currentEvent.ownerToken || isMine);
   const owner = task.person
@@ -998,13 +1010,13 @@ function renderTasks() {
   const viewer = attendees.find(person => person.id === currentViewerAttendeeId);
   const viewerName = viewer?.name || (currentEvent.ownerToken ? attendees.find(person => person.role === 'Organizador')?.name : authUser?.name) || '';
   const visibleTasks = taskFilter === 'mine'
-    ? tasks.filter(task => task.person === viewerName)
+    ? tasks.filter(task => task.person && ((task.personId && viewer?.id === task.personId) || (viewerName && task.person === viewerName)))
     : taskFilter === 'unassigned'
       ? tasks.filter(task => !task.person)
       : tasks;
   const emptyFilterMessage = taskFilter === 'unassigned' ? 'No hay compras sin asignar.' : 'No tienes compras asignadas en este evento.';
   $('#task-board').innerHTML = visibleTasks.length
-    ? visibleTasks.map((task, index) => renderTaskRow(task, index, true)).join('')
+    ? visibleTasks.map(task => renderTaskRow(task, tasks.indexOf(task), true)).join('')
     : `<p class="task-filter-empty">${emptyFilterMessage}</p>`;
   const taskFilterInput = $('#task-filter');
   if (taskFilterInput) {
@@ -1549,7 +1561,8 @@ function renderCommunity() {
 }
 
 async function loadCommunity(force = false) {
-  if (!currentEvent?.inviteToken || communityLoading || (!force && communityLoadedToken === currentEvent.inviteToken)) return;
+  const viewerKey = currentEvent?.ownerToken ? `organizer:${currentEvent.ownerToken}` : `attendee:${currentViewerAttendeeId || joinedInvitationTokens[currentEvent?.inviteToken] || ''}`;
+  if (!currentEvent?.inviteToken || communityLoading || (!force && communityLoadedToken === currentEvent.inviteToken && communityLoadedViewerKey === viewerKey)) return;
   const viewer = attendees.find(person => person.id === currentViewerAttendeeId);
   if (!currentEvent.ownerToken && (!viewer || !['Confirmado', 'Confirmada'].includes(viewer.status))) return;
   communityLoading = true;
@@ -1562,6 +1575,7 @@ async function loadCommunity(force = false) {
     eventPhotos = photosResult.photos || [];
     eventNotifications = photosResult.notifications || result.notifications || eventNotifications;
     communityLoadedToken = currentEvent.inviteToken;
+    communityLoadedViewerKey = viewerKey;
     renderCommunity();
     renderNotifications();
   } catch (error) {
@@ -1870,13 +1884,28 @@ $$('.modal-close').forEach(button => button.addEventListener('click', () => {
 }));
 
 $('#auth-toggle').addEventListener('click', () => setAuthMode(authMode === 'login' ? 'register' : 'login'));
+$('#auth-forgot').addEventListener('click', () => setAuthMode('forgot-request'));
 $('#auth-form').addEventListener('submit', async event => {
   event.preventDefault();
   const form = new FormData(event.currentTarget);
   const submitButton = $('#auth-submit');
   submitButton.disabled = true;
-  $('#auth-feedback').textContent = authMode === 'register' ? 'Creando tu cuenta…' : 'Comprobando tus datos…';
+  $('#auth-feedback').textContent = authMode === 'register' ? 'Creando tu cuenta…' : authMode === 'forgot-request' ? 'Enviando el código…' : authMode === 'forgot-reset' ? 'Actualizando la contraseña…' : 'Comprobando tus datos…';
   try {
+    if (authMode === 'forgot-request') {
+      await requestApi('/api/auth/forgot-password', { method: 'POST', body: JSON.stringify({ email: form.get('email') }) });
+      $('#auth-feedback').textContent = 'Si existe una cuenta con ese correo, recibirás un código en unos minutos.';
+      setAuthMode('forgot-reset');
+      $('#auth-email').value = form.get('email');
+      return;
+    }
+    if (authMode === 'forgot-reset') {
+      await requestApi('/api/auth/reset-password', { method: 'POST', body: JSON.stringify({ email: form.get('email'), code: form.get('code'), password: form.get('newPassword') }) });
+      setAuthMode('login');
+      $('#auth-password').value = '';
+      $('#auth-feedback').textContent = 'Contraseña actualizada. Ya puedes iniciar sesión.';
+      return;
+    }
     const result = await requestApi(`/api/auth/${authMode}`, {
       method: 'POST',
       body: JSON.stringify({ name: form.get('name'), email: form.get('email'), password: form.get('password') })
@@ -2584,9 +2613,11 @@ async function loadInvitationFromLink() {
       notifications: cloneData(invitation.notifications || [])
     };
     currentEvent = remoteEvent;
-    currentViewerAttendeeId = authUser
+    currentViewerAttendeeId = invitation.viewerAttendeeId || (authUser
       ? (invitation.attendees.find(person => person.name === authUser.name)?.id || '')
-      : (invitation.attendees.find(person => person.name.toLocaleLowerCase('es-ES') === (joinedInvitationNames[activeInviteToken] || '').toLocaleLowerCase('es-ES'))?.id || '');
+      : (invitation.attendees.find(person => person.name.toLocaleLowerCase('es-ES') === (joinedInvitationNames[activeInviteToken] || '').toLocaleLowerCase('es-ES'))?.id || ''));
+    communityLoadedToken = '';
+    communityLoadedViewerKey = '';
     restoreEventData(remoteEvent.id);
     renderAll();
     persistAppState();
@@ -2655,6 +2686,9 @@ $('#join-form').addEventListener('submit', async event => {
     dateOptions = joinedRemote.dateOptions || dateOptions;
     expenses = joinedRemote.expenses || expenses;
     eventNotifications = joinedRemote.notifications || eventNotifications;
+    currentViewerAttendeeId = joinedRemote.viewerAttendeeId || currentViewerAttendeeId;
+    communityLoadedToken = '';
+    communityLoadedViewerKey = '';
     joinedInvitationNames[activeInviteToken] = name;
     saveCurrentEventData();
     renderAll();
