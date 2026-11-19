@@ -47,6 +47,11 @@ test('los componentes principales no recuperan fondos verdes', () => {
   assert.match(stylesCss, /\.chat-message \{ border-color: #c8ddeb; background: #eaf4fb; \}/);
 });
 
+test('compartir fotos usa el mismo botón compacto que las acciones del evento', () => {
+  assert.match(indexHtml, /class="compact-action-button upload-photo-button"/);
+  assert.match(indexHtml, /class="action-icon" aria-hidden="true">▧<\/span><span>Compartir foto/);
+});
+
 test('el enlace de mapa se genera con una búsqueda segura', () => {
   assert.match(appJs, /https:\/\/www\.google\.com\/maps\/search\/\?api=1&query=/);
   assert.match(appJs, /encodeURIComponent\(currentEvent\.location\)/);
