@@ -13,7 +13,7 @@ let attendees = [];
 let tasks = [];
 let expenses = [];
 
-const colors = ['#d6c6a9', '#c4d6c0', '#d9c2cf', '#e7d5a9', '#b8d2d1', '#e5c4ba'];
+const colors = ['#d6c6a9', '#cfe5f3', '#d9c2cf', '#e7d5a9', '#b8d2d1', '#e5c4ba'];
 const eventImageCount = 9;
 const avatarImageCount = 12;
 let wizardImageIndex = 0;
@@ -1103,6 +1103,30 @@ function renderTasks() {
   }));
 }
 
+function attendeeAvatarStyle(person) {
+  const value = person?.avatar;
+  if (typeof value === 'string' && value.startsWith('data:image/')) return customImageStyle(value);
+  const avatarIndex = Number(value);
+  if (Number.isInteger(avatarIndex) && avatarIndex >= 0 && avatarIndex < avatarImageCount) {
+    return spriteStyle('/avatars.png', avatarIndex, 4, 3);
+  }
+  if (person?.id === currentViewerAttendeeId && authUser) {
+    const ownAvatar = authUser.avatar;
+    if (typeof ownAvatar === 'string' && ownAvatar.startsWith('data:image/')) return customImageStyle(ownAvatar);
+    const ownAvatarIndex = Number(ownAvatar);
+    if (Number.isInteger(ownAvatarIndex) && ownAvatarIndex >= 0 && ownAvatarIndex < avatarImageCount) {
+      return spriteStyle('/avatars.png', ownAvatarIndex, 4, 3);
+    }
+  }
+  return person?.color ? `background:${escapeHtml(person.color)};` : '';
+}
+
+function attendeeAvatarMarkup(person) {
+  const style = attendeeAvatarStyle(person);
+  const hasImage = style.includes('background-image:');
+  return `<span class="avatar"${style ? ` style="${style}"` : ''}>${hasImage ? '' : escapeHtml(person.initial || '')}</span>`;
+}
+
 function renderAttendees() {
   const confirmedPeople = attendees.filter(person => person.status !== 'Pendiente' && person.status !== 'Cancelado');
   const confirmed = confirmedPeople.reduce((total, person) => total + attendeePeopleCount(person), 0);
@@ -1118,7 +1142,7 @@ function renderAttendees() {
   $('#status-pending-count').textContent = pending;
   $('#split-count').textContent = confirmed;
   $('#avatar-stack').innerHTML = confirmedPeople.slice(0, 4).map(person =>
-    `<span class="avatar" style="background:${person.color}">${escapeHtml(person.initial)}</span>`
+    attendeeAvatarMarkup(person)
   ).join('') + (confirmedPeople.length > 4 ? `<span class="avatar avatar-extra">+${confirmedPeople.length - 4}</span>` : '');
   $('#avatar-stack').setAttribute('aria-label', `${confirmed} ${confirmed === 1 ? 'asistente confirmado' : 'asistentes confirmados'}`);
   const me = attendees.find(person => person.id === currentViewerAttendeeId) || attendees[0];
@@ -1128,11 +1152,11 @@ function renderAttendees() {
   $('#confirm-button-text').textContent = organizerConfirmed ? 'Asistencia confirmada' : 'Confirmar asistencia';
 
   $('#attendee-strip').innerHTML = attendees.slice(0, 6).map(person =>
-    `<div class="person-chip"><span class="avatar" style="background:${person.color}">${person.initial}</span><span>${escapeHtml(person.name.split(' ')[0])}</span></div>`
+    `<div class="person-chip">${attendeeAvatarMarkup(person)}<span>${escapeHtml(person.name.split(' ')[0])}</span></div>`
   ).join('');
   $('#attendee-list').innerHTML = attendees.map((person, index) => `
     <div class="attendee-list-row" data-attendee-id="${escapeHtml(person.id || '')}">
-      <span class="avatar" style="background:${person.color}">${person.initial}</span>
+       ${attendeeAvatarMarkup(person)}
       <span class="attendee-list-name"><strong>${escapeHtml(person.name)}</strong><small>${escapeHtml(person.role)} · ${escapeHtml(attendeePartyLabel(person))}</small></span>
        <span class="attendance-status ${person.status === 'Pendiente' || person.status === 'Cancelado' ? 'pending' : ''}">${person.status === 'Pendiente' ? 'Por confirmar' : person.status}</span>
        ${currentEvent.ownerToken && index > 0 ? `<button class="attendee-edit-button" type="button" data-edit-attendee="${escapeHtml(person.id || '')}" aria-label="Editar asistencia de ${escapeHtml(person.name)}">✎</button>` : ''}
@@ -1963,6 +1987,7 @@ $('#profile-form').addEventListener('submit', async event => {
     });
     authUser = result.user;
     updateProfileUi();
+    if (currentEvent?.inviteToken) renderAttendees();
     $('#profile-modal').close();
     showToast('Perfil actualizado.');
   } catch (error) {

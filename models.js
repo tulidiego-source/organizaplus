@@ -48,6 +48,8 @@ class Attendee {
     const statuses = ['Confirmado', 'Confirmada', 'Pendiente', 'Cancelado'];
     if (!statuses.includes(input.status)) throw new HttpError(400, 'El estado de asistencia no es válido.');
     const role = typeof input.role === 'string' ? cleanText(input.role, 'El rol', 40, false) : 'Participante';
+    const avatar = input.avatar === undefined || input.avatar === '' ? '' : String(input.avatar);
+    if (avatar && !/^([0-9]|1[01])$/.test(avatar)) normalizeImageData(avatar, 'El avatar del asistente');
     return {
       name,
       initial: Array.from(name)[0].toLocaleUpperCase('es-ES'),
@@ -55,7 +57,8 @@ class Attendee {
       status: input.status,
       adults: Number.isInteger(input.adults) && input.adults >= 1 && input.adults <= 50 ? input.adults : 1,
       children: Number.isInteger(input.children) && input.children >= 0 && input.children <= 50 ? input.children : 0,
-      color: /^#[\da-f]{6}$/i.test(input.color || '') ? input.color : '#c4d6c0',
+      color: /^#[\da-f]{6}$/i.test(input.color || '') ? input.color : '#cfe5f3',
+      avatar,
       ...(typeof input.email === 'string' ? { email: input.email.slice(0, 254).trim().toLowerCase() } : {}),
       id: typeof input.id === 'string' ? input.id : `initial-${index}`,
       privateToken: typeof input.privateToken === 'string' ? input.privateToken : crypto.randomBytes(24).toString('base64url'),

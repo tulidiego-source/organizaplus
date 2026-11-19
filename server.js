@@ -711,6 +711,12 @@ function eventForAuthenticatedUser(record, request, user) {
         'UPDATE organizers SET name = $1, avatar = $2, password_hash = COALESCE($3, password_hash) WHERE id = $4 RETURNING id, email, name, avatar',
         [name, avatar, passwordHash, user.id]
       );
+      records.forEach(record => {
+        record.attendees.forEach(person => {
+          if (person.accountUserId === user.id) person.avatar = avatar;
+        });
+      });
+      await saveStore();
       sendJson(response, 200, { user: result.rows[0] });
       return;
     }
@@ -751,6 +757,7 @@ function eventForAuthenticatedUser(record, request, user) {
         let record = records.find(item => item.clientEventId === body.clientEventId);
         if (!record) {
           record = createEventRecord(body, user ? user.id : null);
+          if (user && record.attendees[0]) record.attendees[0].avatar = user.avatar || '0';
           records.push(record);
         } else if (user && record.ownerUserId && record.ownerUserId !== user.id) {
           throw new HttpError(403, 'No tienes permiso para usar este identificador de evento.');
@@ -1183,7 +1190,10 @@ function eventForAuthenticatedUser(record, request, user) {
           existing.role = 'Participante';
           existing.adults = partyAdults;
           existing.children = children;
-          if (user) existing.accountUserId = user.id;
+          if (user) {
+            existing.accountUserId = user.id;
+            existing.avatar = user.avatar || '0';
+          }
         } else {
           record.attendees.push({
             id: crypto.randomUUID(),
@@ -1193,9 +1203,9 @@ function eventForAuthenticatedUser(record, request, user) {
             status: 'Confirmado',
             adults: partyAdults,
             children,
-            color: '#c4d6c0',
+            color: '#cfe5f3',
             privateToken: crypto.randomBytes(24).toString('base64url'),
-            ...(user ? { accountUserId: user.id } : {})
+            ...(user ? { accountUserId: user.id, avatar: user.avatar || '0' } : {})
           });
         }
         const nextHeadcount = attendeeHeadcount(record.attendees);

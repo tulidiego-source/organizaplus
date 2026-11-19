@@ -84,7 +84,7 @@ function invitationPayload(capacity = 4) {
       name: 'Organizadora',
       role: 'Organizador',
       status: 'Confirmado',
-      color: '#c4d6c0'
+      color: '#cfe5f3'
     }],
     tasks: [{ name: 'Hielo', quantity: '2 bolsas', person: '', done: false }],
     dateOptions: [{ date: '2026-12-01', time: '14:00', votes: 1 }],

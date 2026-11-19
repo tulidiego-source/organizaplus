@@ -66,6 +66,19 @@ test('las novedades se actualizan en los puntos del menú', () => {
   assert.match(appJs, /touchend/);
 });
 
+test('los asistentes muestran el avatar elegido en su perfil', () => {
+  assert.match(appJs, /function attendeeAvatarStyle\(person\)/);
+  assert.match(appJs, /customImageStyle\(value\)/);
+  assert.match(appJs, /spriteStyle\('\/avatars\.png', avatarIndex, 4, 3\)/);
+  assert.match(appJs, /function attendeeAvatarMarkup\(person\)/);
+  assert.match(appJs, /attendeeAvatarMarkup\(person\)/);
+});
+
+test('el menú inferior ocupa todo el ancho disponible', () => {
+  assert.match(stylesCss, /\.event-nav \{ left: 5px; right: 5px; width: auto; overflow-x: auto;/);
+  assert.doesNotMatch(stylesCss, /\.main-nav \{ left: 5px; width: 27%; \}/);
+});
+
 test('el mensaje de edición identifica al asistente seleccionado', () => {
   assert.match(appJs, /attendees\.find\(person => person\.id === editingAttendeeId\)/);
   assert.match(appJs, /const editingName = editingPerson\?\.name \|\| authUser\?\.name/);
