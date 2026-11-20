@@ -58,6 +58,16 @@ npm test
 
 ## Cuentas y eventos
 
+### Gastos y reparto familiar
+
+Los participantes confirmados pueden registrar sus propios tickets. El organizador también puede registrar un pago a nombre de otro asistente confirmado. La aplicación espera la confirmación del servidor antes de anunciar que se ha guardado un ticket; si falla, conserva el formulario para reintentarlo.
+
+En **Gastos**, pulsa **Mi grupo**, uno de tus tickets o tu balance para consultar la cuota familiar, lo adelantado y el saldo. Puedes repartir la cuota entre todos los adultos y niños, hacer que los adultos cubran a los niños o introducir importes personalizados. El reparto se calcula en céntimos y la suma debe coincidir con la cuota del grupo.
+
+El reparto interno es una ayuda privada guardada **solo en ese navegador/dispositivo**. No cambia las cuentas generales del evento ni envía notificaciones. Los tickets y las cuentas generales sí se guardan en el servidor. Los grupos con saldo cero se muestran como **Saldado**.
+
+Las acciones propias se consideran leídas y no envían push al autor. Las credenciales de otros asistentes y del organizador no deben aparecer en las respuestas públicas de novedades, chat, fotos ni gastos.
+
 Con `DATABASE_URL` configurado, OrganizaT crea automáticamente las tablas `organizers`, `organizer_sessions` e `invitation_events`. La pantalla principal requiere una cuenta de organizador: puedes registrarte desde la aplicación, iniciar sesión y recuperar tus eventos desde otro navegador o dispositivo. Las contraseñas se guardan como hashes `scrypt` y la sesión se mantiene mediante una cookie HttpOnly.
 
 Los invitados no necesitan cuenta: siguen accediendo mediante el enlace `/join/...` y pueden confirmar su asistencia. Las invitaciones, tareas, votaciones y gastos del evento se guardan en PostgreSQL.

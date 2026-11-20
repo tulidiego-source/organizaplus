@@ -96,11 +96,17 @@ class DateOption {
 class Expense {
   static from(input) {
     if (!input || typeof input !== 'object' || !Number.isFinite(Number(input.amount)) || Number(input.amount) <= 0) throw new HttpError(400, 'Hay un gasto no válido.');
+    const cents = Math.round(Number(input.amount) * 100);
+    if (!Number.isSafeInteger(cents) || cents <= 0) throw new HttpError(400, 'El importe del gasto no es válido.');
     return {
       name: cleanText(input.name, 'El concepto del gasto', 80),
-      amount: Math.round(Number(input.amount) * 100) / 100,
+      amount: cents / 100,
       person: cleanText(input.person, 'La persona que pagó', 60),
-      date: cleanText(input.date || '', 'La fecha del gasto', 40, false)
+      date: cleanText(input.date || '', 'La fecha del gasto', 40, false),
+      id: typeof input.id === 'string' && input.id ? input.id : crypto.randomUUID(),
+      ...(typeof input.personId === 'string' ? { personId: input.personId } : {}),
+      ...(typeof input.payerId === 'string' ? { payerId: input.payerId } : {}),
+      ...(typeof input.createdBy === 'string' ? { createdBy: input.createdBy } : {})
     };
   }
 }
@@ -187,7 +193,13 @@ class Invitation {
   }
   static expenses(input) {
     if (!Array.isArray(input) || input.length > 200) throw new HttpError(400, 'La lista de gastos no es válida.');
-    return input.map(item => Expense.from(item));
+    const expenses = input.map(item => Expense.from(item));
+    let totalCents = 0;
+    for (const expense of expenses) {
+      totalCents += Math.round(expense.amount * 100);
+      if (!Number.isSafeInteger(totalCents)) throw new HttpError(400, 'La suma de los gastos supera el importe permitido.');
+    }
+    return expenses;
   }
   static chatMessages(input) {
     if (!Array.isArray(input) || input.length > 1000) throw new HttpError(400, 'El chat no es válido.');

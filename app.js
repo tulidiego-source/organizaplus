@@ -62,7 +62,6 @@ let notificationSoundEventId = '';
 let knownNotificationIds = new Set();
 let serviceWorkerRegistration = null;
 let deferredInstallPrompt = null;
-let sectionSeenItems = {};
 let pendingNotificationHighlight = null;
 let pendingDeepLinkTab = '';
 
@@ -466,12 +465,6 @@ function restoreEventData(eventId) {
   selectedDate = state.selectedDate;
   currentVote = state.currentVote;
   eventNotifications = cloneData(state.notifications || []);
-  for (const tab of ['attendees', 'tasks']) {
-    const key = `${eventId}:${tab}`;
-    if (!Object.prototype.hasOwnProperty.call(sectionSeenItems, key)) {
-      sectionSeenItems[key] = new Set(sectionPendingItems(tab));
-    }
-  }
 }
 
 function loadPersistedData() {
@@ -511,6 +504,7 @@ function activateEvent(event) {
   saveCurrentEventData();
   currentEvent = event;
   currentTab = 'overview';
+  currentViewerAttendeeId = event.viewerAttendeeId || '';
   communityMessages = [];
   eventPhotos = [];
   communityLoadedToken = '';
@@ -572,9 +566,7 @@ async function loadOwnedEvents() {
     };
   });
   currentEvent = eventTemplates[0];
-  currentViewerAttendeeId = currentEvent.viewerAttendeeId
-    || currentEvent.attendees?.find(person => person.name === authUser?.name)?.id
-    || '';
+  currentViewerAttendeeId = currentEvent.viewerAttendeeId || '';
   restoreEventData(currentEvent.id);
   renderAll();
   persistAppState();
@@ -702,11 +694,8 @@ function updateJoinAuthenticationUi() {
 
 function maybeSkipJoinConfirmation() {
   if (!activeInviteToken || currentEvent.inviteToken !== activeInviteToken || joinAlreadyHandledToken === activeInviteToken) return;
-  const knownName = authUser?.name || joinedInvitationNames[activeInviteToken];
-  if (!knownName) return;
-  const normalizedName = knownName.trim().toLocaleLowerCase('es-ES');
   const alreadyConfirmed = attendees.some(person =>
-    person.status !== 'Pendiente' && person.name.trim().toLocaleLowerCase('es-ES') === normalizedName
+    person.id === currentViewerAttendeeId && ['Confirmado', 'Confirmada'].includes(person.status)
   );
   if (!alreadyConfirmed) return;
   joinAlreadyHandledToken = activeInviteToken;
@@ -720,7 +709,6 @@ async function bootstrapAuth() {
   try {
     const result = await requestApi('/api/auth/me');
     authUser = result.user;
-    if (activeInviteToken) currentViewerAttendeeId = attendees.find(person => person.name === authUser.name)?.id || '';
     updateProfileUi();
     if (/^\/join\//.test(window.location.pathname)) {
       updateJoinAuthenticationUi();
@@ -889,7 +877,8 @@ async function refreshRemoteAttendees(showError = false) {
     currentEvent = { ...currentEvent, ...(invitation.event || {}) };
     eventTemplates = eventTemplates.map(event => event.id === currentEvent.id ? currentEvent : event);
     const refreshedAttendees = invitation.attendees;
-    if (invitation.viewerAttendeeId) currentViewerAttendeeId = invitation.viewerAttendeeId;
+    currentViewerAttendeeId = invitation.viewerAttendeeId || '';
+    currentEvent.viewerAttendeeId = currentViewerAttendeeId;
     tasks = invitation.tasks;
     dateOptions = invitation.dateOptions;
     expenses = invitation.expenses || [];
@@ -1076,7 +1065,8 @@ function renderTasks() {
     if (!(task.purchased === true || task.done === true)) {
       pendingPurchaseTaskId = task.id;
       $('#expense-name').value = task.name;
-      $('#expense-person').value = task.person || viewer?.name || authUser?.name || '';
+      populatePeopleOptions();
+      $('#expense-person').value = currentEvent.ownerToken ? (task.personId || expensePayer(task)?.id || '') : (viewer?.id || '');
       openDialog('#expense-modal');
       return;
     }
@@ -1216,9 +1206,106 @@ async function deleteSelectedAttendee() {
   }
 }
 
+// Legacy tickets only match a name when that name identifies exactly one attendee.
+function expensePayer(expense) {
+  if (expense.personId) return attendees.find(person => person.id === expense.personId) || null;
+  const matches = attendees.filter(person => person.name === expense.person);
+  return matches.length === 1 ? matches[0] : null;
+}
+
+let myGroupBalance = null;
+let myGroupContext = null;
+
+function renderMyGroupButton(balances) {
+  const viewer = currentEvent.ownerToken ? attendees[0] : attendees.find(person => person.id === currentViewerAttendeeId);
+  myGroupBalance = viewer?.id ? balances.find(person => person.id === viewer.id) : null;
+  const button = $('#my-group-button');
+  button.classList.toggle('hidden', !myGroupBalance);
+  button.disabled = !myGroupBalance;
+}
+
+function makeOwnExpenseRowButton(row, label) {
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = row.className + ' my-group-entry-button';
+  for (const attribute of row.attributes) {
+    if (attribute.name.startsWith('data-')) button.setAttribute(attribute.name, attribute.value);
+  }
+  button.setAttribute('aria-label', label + '. Abrir Mi grupo');
+  button.setAttribute('aria-haspopup', 'dialog');
+  button.setAttribute('aria-controls', 'my-group-modal');
+  button.innerHTML = row.innerHTML + '<span class="my-group-entry-icon" aria-hidden="true">›</span>';
+  button.addEventListener('click', openMyGroup);
+  row.replaceWith(button);
+}
+
+function internalGroupKey(context) {
+  return `organiza-plus.group.v1:${encodeURIComponent(context.eventId)}:${encodeURIComponent(context.attendeeId)}`;
+}
+
+function exactSplit(cents, count) {
+  if (!count) return [];
+  return Array.from({ length: count }, (_, index) => Math.floor(cents / count) + (index < cents % count ? 1 : 0));
+}
+
+function renderInternalGroup(values) {
+  const context = myGroupContext;
+  if (!context) return;
+  const mode = $('#my-group-mode').value;
+  const adults = Math.max(1, Number(context.person.adults) || 1);
+  const children = Math.max(0, Number(context.person.children) || 0);
+  const labels = Array.from({ length: adults }, (_, index) => index === 0 ? 'Tú' : `Adulto ${index + 1}`)
+    .concat(Array.from({ length: children }, (_, index) => `Niño ${index + 1}`));
+  let amounts = mode === 'adults' ? [...exactSplit(context.quota, adults), ...Array(children).fill(0)] : exactSplit(context.quota, labels.length);
+  if (mode === 'custom' && Array.isArray(values) && values.length === labels.length && values.every(value => Number.isSafeInteger(value) && value >= 0)) amounts = values;
+  $('#my-group-members').innerHTML = labels.map((label, index) => `<label for="group-member-${index}">${label}</label><input id="group-member-${index}" data-group-member type="number" min="0" step="0.01" required aria-label="Cuota de ${label} en euros" value="${(amounts[index] / 100).toFixed(2)}" ${mode === 'custom' ? '' : 'readonly'}>`).join('');
+  updateInternalGroupTotal();
+}
+
+function internalGroupAmounts() {
+  return $$('[data-group-member]').map(input => {
+    const value = Number(input.value);
+    return input.value !== '' && Number.isFinite(value) && value >= 0 && Math.abs(value * 100 - Math.round(value * 100)) < 0.00001 ? Math.round(value * 100) : NaN;
+  });
+}
+
+function updateInternalGroupTotal() {
+  const total = internalGroupAmounts().reduce((sum, value) => sum + value, 0);
+  const difference = myGroupContext.quota - total;
+  $('#my-group-feedback').textContent = !Number.isSafeInteger(total) ? 'Introduce importes válidos con dos decimales.' :
+    `Total interno: ${euro(total / 100)}. ${difference === 0 ? 'La suma coincide con la cuota familiar.' : `Diferencia: ${euro(difference / 100)}.`}`;
+}
+
+function openMyGroup() {
+  if (!myGroupBalance) return;
+  const person = myGroupBalance;
+  myGroupContext = { eventId: currentEvent.id, attendeeId: person.id, person: { ...person }, quota: person.groupShareCents };
+  $('#my-group-summary').textContent = `Cuota familiar: ${euro(person.groupShare)} · Adelantado: ${euro(person.paidCents / 100)} · Saldo: ${euro(person.balance)}`;
+  let saved;
+  try { saved = JSON.parse(localStorage.getItem(internalGroupKey(myGroupContext)) || 'null'); } catch { saved = null; }
+  $('#my-group-mode').value = ['equal', 'adults', 'custom'].includes(saved?.mode) ? saved.mode : 'equal';
+  renderInternalGroup(saved?.amounts);
+  openDialog('#my-group-modal');
+}
+$('#my-group-button').addEventListener('click', openMyGroup);
+$('#my-group-mode').addEventListener('change', () => renderInternalGroup());
+$('#my-group-members').addEventListener('input', updateInternalGroupTotal);
+$('#my-group-form').addEventListener('submit', event => {
+  event.preventDefault();
+  const amounts = internalGroupAmounts();
+  if (!myGroupContext || amounts.some(value => !Number.isSafeInteger(value)) || amounts.reduce((sum, value) => sum + value, 0) !== myGroupContext.quota) {
+    $('#my-group-feedback').textContent = 'La suma debe coincidir exactamente con la cuota familiar.';
+    return;
+  }
+  try {
+    localStorage.setItem(internalGroupKey(myGroupContext), JSON.stringify({ mode: $('#my-group-mode').value, amounts }));
+    $('#my-group-feedback').textContent = 'Reparto interno guardado en este dispositivo.';
+  } catch { $('#my-group-feedback').textContent = 'No se pudo guardar el reparto en este dispositivo.'; }
+});
+
 function renderExpenses() {
-  const total = expenses.reduce((sum, expense) => sum + expense.amount, 0);
-  const confirmed = attendees.filter(person => person.status !== 'Pendiente' && person.status !== 'Cancelado')
+  const total = expenses.reduce((sum, expense) => sum + Math.round(expense.amount * 100), 0) / 100;
+  const confirmed = attendees.filter(person => ['Confirmado', 'Confirmada'].includes(person.status))
     .reduce((totalPeople, person) => totalPeople + attendeePeopleCount(person), 0);
   const share = confirmed ? total / confirmed : 0;
   $('#total-expenses').textContent = euro(total);
@@ -1233,14 +1320,15 @@ function renderExpenses() {
       <span class="expense-entry-amount">${euro(expense.amount)}</span>
     </div>`).join('');
 
-  const totalCents = Math.round(total * 100);
-  const confirmedPeople = attendees.filter(person => person.status !== 'Pendiente' && person.status !== 'Cancelado');
+  const totalCents = expenses.reduce((sum, expense) => sum + Math.round(expense.amount * 100), 0);
+  const confirmedPeople = attendees.filter(person => ['Confirmado', 'Confirmada'].includes(person.status));
   const baseShareCents = confirmed ? Math.floor(totalCents / confirmed) : 0;
   let remainingExtraShareCents = confirmed ? totalCents % confirmed : 0;
   const paidByPerson = new Map();
   expenses.forEach(expense => {
     const paidCents = Math.round(expense.amount * 100);
-    paidByPerson.set(expense.person, (paidByPerson.get(expense.person) || 0) + paidCents);
+    const payer = expensePayer(expense);
+    if (payer) paidByPerson.set(payer, (paidByPerson.get(payer) || 0) + paidCents);
   });
   const balances = confirmedPeople
     .map(person => {
@@ -1253,18 +1341,29 @@ function renderExpenses() {
         groupSize,
         groupShareCents,
         groupShare: groupShareCents / 100,
-        balance: ((paidByPerson.get(person.name) || 0) - groupShareCents) / 100
+        paidCents: paidByPerson.get(person) || 0,
+        balance: ((paidByPerson.get(person) || 0) - groupShareCents) / 100
       };
     })
-    .filter(person => Math.abs(person.balance) > 0.005)
     .sort((a, b) => b.balance - a.balance);
+  renderMyGroupButton(balances);
   $('#balances-list').innerHTML = balances.map(person => `
     <div class="balance-entry">
       ${attendeeAvatarMarkup(person, attendees.indexOf(person), 'mini-avatar avatar')}
       <span class="balance-entry-copy"><strong>${escapeHtml(person.name)}</strong><small>${person.groupSize} ${person.groupSize === 1 ? 'persona' : 'personas'} · ${person.adults || 0} ${(person.adults || 0) === 1 ? 'adulto' : 'adultos'}${person.children ? ` · ${person.children} ${person.children === 1 ? 'niño' : 'niños'}` : ''} · Grupo: ${euro(person.groupShare)}</small></span>
-      <span class="owes-note">${person.balance > 0 ? 'Ha adelantado' : 'Le corresponde'}</span>
-      <span class="balance-amount ${person.balance < 0 ? 'owes' : ''}">${person.balance > 0 ? '+' : '−'}${euro(Math.abs(person.balance))}</span>
+      <span class="owes-note">${person.balance === 0 ? 'Saldado' : person.balance > 0 ? 'A recibir' : 'Pendiente'}</span>
+      <span class="balance-amount ${person.balance < 0 ? 'owes' : ''}">${person.balance === 0 ? '' : person.balance > 0 ? '+' : '−'}${euro(Math.abs(person.balance))}</span>
     </div>`).join('') || '<p class="panel-subtitle">Todavía no hay cuentas que repartir.</p>';
+  if (myGroupBalance) {
+    const ownBalanceIndex = balances.findIndex(person => person.id === myGroupBalance.id);
+    const ownBalanceRow = $('#balances-list').children[ownBalanceIndex];
+    if (ownBalanceRow) makeOwnExpenseRowButton(ownBalanceRow, 'Tu balance');
+    expenses.forEach((expense, index) => {
+      if (expensePayer(expense)?.id === myGroupBalance.id) {
+        makeOwnExpenseRowButton($('#expense-list').children[index], 'Tu ticket: ' + expense.name);
+      }
+    });
+  }
 }
 
 function renderDateOptions() {
@@ -1304,12 +1403,20 @@ function renderDateOptions() {
 }
 
 function populatePeopleOptions() {
+  if (!currentEvent.inviteToken) attendees.forEach(person => { if (!person.id) person.id = crypto.randomUUID(); });
   const options = attendees
     .filter(person => ['Confirmado', 'Confirmada'].includes(person.status))
     .map(person => `<option value="${escapeHtml(person.name)}">${escapeHtml(person.name)}</option>`)
     .join('');
   $('#task-person').innerHTML = `<option value="">Sin asignar</option>${options}`;
-  $('#expense-person').innerHTML = options;
+  const payerSelect = $('#expense-person');
+  const selectedPayer = payerSelect.value;
+  const payers = currentEvent.ownerToken || !currentEvent.inviteToken
+    ? attendees.filter(person => ['Confirmado', 'Confirmada'].includes(person.status))
+    : attendees.filter(person => person.id === currentViewerAttendeeId && ['Confirmado', 'Confirmada'].includes(person.status));
+  payerSelect.innerHTML = payers.map(person => `<option value="${escapeHtml(person.id || '')}">${escapeHtml(person.name)}</option>`).join('');
+  if (payers.some(person => person.id === selectedPayer)) payerSelect.value = selectedPayer;
+  payerSelect.disabled = Boolean(currentEvent.inviteToken && !currentEvent.ownerToken);
 }
 
 function renderEventGallery() {
@@ -1411,26 +1518,6 @@ function capitalize(value) {
   return value.charAt(0).toUpperCase() + value.slice(1);
 }
 
-function sectionPendingItems(tab) {
-  if (tab === 'attendees') return attendees.filter(person => person.status === 'Pendiente').map(person => person.id);
-  if (tab === 'tasks') return tasks.filter(task => !task.person).map(task => task.id);
-  return [];
-}
-
-function sectionSeenKey(tab) {
-  return `${currentEvent.id}:${tab}`;
-}
-
-function markSectionViewed(tab) {
-  if (!['attendees', 'tasks'].includes(tab)) return;
-  sectionSeenItems[sectionSeenKey(tab)] = new Set(sectionPendingItems(tab));
-}
-
-function sectionHasUnseen(tab) {
-  const seen = sectionSeenItems[sectionSeenKey(tab)] || new Set();
-  return sectionPendingItems(tab).some(id => !seen.has(id));
-}
-
 function notificationDestinationTab(notification) {
   if (notification?.targetType === 'attendee') return 'attendees';
   if (notification?.targetType === 'task') return 'tasks';
@@ -1458,10 +1545,11 @@ function unreadSectionNotifications(tab) {
 
 function viewSectionChanges(tab) {
   if (!['attendees', 'tasks', 'expenses', 'chat', 'photos'].includes(tab)) return;
-  const unread = unreadSectionNotifications(tab);
+  const unread = unreadSectionNotifications(tab).slice().sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
   if (unread.length) {
     window.requestAnimationFrame(() => {
-      unread.forEach((notification, index) => highlightNotificationTarget(notification, tab, { scroll: index === unread.length - 1 }));
+      if (tab === 'chat') highlightNotificationTarget(unread[0], tab);
+      else unread.forEach((notification, index) => highlightNotificationTarget(notification, tab, { scroll: index === 0 }));
     });
   }
   const ids = unread.map(notification => notification.id).filter(Boolean);
@@ -1543,7 +1631,6 @@ function setTab(tab, options = {}) {
   if (options.highlight) highlightNotificationTarget(options.notification, currentTab);
   if (['attendees', 'tasks', 'expenses', 'chat', 'photos'].includes(currentTab)) {
     viewSectionChanges(currentTab);
-    if (['attendees', 'tasks'].includes(currentTab)) markSectionViewed(currentTab);
     renderNotifications();
   }
   window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -1589,10 +1676,12 @@ function communityHeaders() {
 function renderCommunity() {
   const chat = $('#chat-messages');
   if (chat) {
+    const previousScrollTop = chat.scrollTop;
+    communityMessages.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
     chat.innerHTML = communityMessages.length
       ? communityMessages.map(message => `<article class="chat-message" data-message-id="${escapeHtml(message.id || '')}"><div class="chat-message-heading"><strong>${escapeHtml(message.authorName)}</strong><small>${escapeHtml(new Date(message.createdAt).toLocaleString('es-ES', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }))}</small></div><p>${escapeHtml(message.text)}</p></article>`).join('')
       : '<p class="empty-hint">Todavía no hay mensajes. ¡Saluda al grupo!</p>';
-    chat.scrollTop = chat.scrollHeight;
+    chat.scrollTop = previousScrollTop;
   }
   const grid = $('#photo-grid');
   if (grid) {
@@ -1679,8 +1768,6 @@ $('#photo-input').addEventListener('change', async event => {
 $$('[data-tab]').forEach(button => button.addEventListener('click', () => setTab(button.dataset.tab)));
 
 function renderNotifications() {
-  const pendingAttendees = attendees.filter(person => person.status === 'Pendiente').length;
-  const unassignedTasks = tasks.filter(task => !task.person).length;
   const viewerKey = currentEvent.ownerToken
     ? `organizer:${currentEvent.ownerToken}`
     : (currentViewerAttendeeId ? `attendee:${currentViewerAttendeeId}` : '');
@@ -1691,11 +1778,7 @@ function renderNotifications() {
     const isUnread = !viewerKey || !Array.isArray(notification.readBy) || !notification.readBy.includes(viewerKey);
     if (isUnread) unreadTabs.add(notificationDestinationTab(notification));
   });
-  const pendingAttendeesUnread = sectionHasUnseen('attendees');
-  const unassignedTasksUnread = sectionHasUnseen('tasks');
-  if (pendingAttendeesUnread) unreadTabs.add('attendees');
-  if (unassignedTasksUnread) unreadTabs.add('tasks');
-  $('[data-inbox-dot]')?.classList.toggle('visible', unreadCount > 0 || pendingAttendeesUnread || unassignedTasksUnread);
+  $('[data-inbox-dot]')?.classList.toggle('visible', unreadCount > 0);
   $$('[data-section-dot]').forEach(dot => dot.classList.toggle('visible', unreadTabs.has(dot.dataset.sectionDot)));
 }
 
@@ -1730,8 +1813,6 @@ async function markNotificationsRead() {
   try {
     const result = await requestApi(`/api/invitations/${encodeURIComponent(currentEvent.inviteToken)}/notifications/read`, { method: 'PATCH', headers: communityHeaders() });
     eventNotifications = result.notifications || [];
-    markSectionViewed('attendees');
-    markSectionViewed('tasks');
     renderNotifications();
     showToast('Notificaciones marcadas como leídas.');
   } catch (error) { showToast(error.message); }
@@ -1804,7 +1885,10 @@ function openDialog(id) {
 
 $('#open-task-modal').addEventListener('click', () => openDialog('#task-modal'));
 $('#open-task-modal-secondary').addEventListener('click', () => openDialog('#task-modal'));
-$('#open-expense-modal').addEventListener('click', () => openDialog('#expense-modal'));
+$('#open-expense-modal').addEventListener('click', () => {
+  populatePeopleOptions();
+  openDialog('#expense-modal');
+});
 $('#invite-button').addEventListener('click', openInviteFlow);
 $('#create-event-button').addEventListener('click', startEventWizard);
 $('#tutorial-button').addEventListener('click', () => openDialog('#tutorial-modal'));
@@ -2455,61 +2539,75 @@ $('#task-form').addEventListener('submit', event => {
   syncRemoteEventState();
 });
 
-$('#expense-form').addEventListener('submit', event => {
+let expenseSubmitting = false;
+$('#expense-form').addEventListener('submit', async event => {
   event.preventDefault();
-  const form = new FormData(event.currentTarget);
+  if (expenseSubmitting) return;
+  const formElement = event.currentTarget;
+  const form = new FormData(formElement);
   const amount = Number(form.get('amount'));
-  if (!Number.isFinite(amount) || amount <= 0) {
-    showToast('Introduce un importe mayor que cero.');
+  const payer = attendees.find(person => person.id === $('#expense-person').value);
+  if (!Number.isFinite(amount) || amount <= 0 || Math.abs(amount * 100 - Math.round(amount * 100)) > 0.00001) {
+    showToast('Introduce un importe positivo con un máximo de dos decimales.');
+    return;
+  }
+  if (!payer || !['Confirmado', 'Confirmada'].includes(payer.status)
+      || (currentEvent.inviteToken && !currentEvent.ownerToken && payer.id !== currentViewerAttendeeId)) {
+    showToast('Selecciona un pagador confirmado válido.');
     return;
   }
   const purchaseTaskId = pendingPurchaseTaskId;
-  pendingPurchaseTaskId = '';
-  expenses.unshift({
-    name: form.get('name').trim(),
-    amount,
-    person: form.get('person'),
-    date: 'Ahora'
-  });
-  renderExpenses();
-  const saved = persistAppState();
-  event.currentTarget.reset();
-  $('#expense-modal').close();
-  if (saved) showToast(purchaseTaskId ? 'Ticket guardado. Marcando la compra…' : 'Ticket guardado y gastos actualizados.');
-
-  const finishPurchase = async () => {
-    if (!purchaseTaskId) return;
-    if (!currentEvent.inviteToken) {
-      const task = tasks.find(item => item.id === purchaseTaskId);
-      if (task) {
-        task.purchased = true;
-        task.done = true;
-        renderAll();
+  const eventId = currentEvent.id;
+  const token = currentEvent.inviteToken;
+  const headers = communityHeaders();
+  const ticket = { name: String(form.get('name') || '').trim(), amount: Math.round(amount * 100) / 100,
+    person: payer.name, personId: payer.id, date: new Date().toISOString().slice(0, 10) };
+  if (!ticket.name) return;
+  expenseSubmitting = true;
+  const submit = formElement.querySelector('[type="submit"]');
+  submit.disabled = true;
+  try {
+    if (token) {
+      const result = await requestApi(`/api/invitations/${encodeURIComponent(token)}/expenses`, {
+        method: 'POST', headers, body: JSON.stringify(ticket)
+      });
+      if (currentEvent.id !== eventId) return;
+      expenses = result.expenses;
+      eventNotifications = result.notifications || eventNotifications;
+    } else {
+      expenses.unshift(ticket);
+    }
+    saveCurrentEventData();
+    const savedLocally = persistAppState();
+    formElement.reset();
+    pendingPurchaseTaskId = '';
+    $('#expense-modal').close();
+    renderAll();
+    if (token || savedLocally) showToast(token ? 'Ticket guardado y gastos actualizados.' : 'Ticket guardado en este dispositivo.');
+    if (purchaseTaskId) {
+      try {
+        if (token) {
+          const result = await requestApi(`/api/invitations/${encodeURIComponent(token)}/tasks/${encodeURIComponent(purchaseTaskId)}`, {
+            method: 'PATCH', headers, body: JSON.stringify({ action: 'purchase' })
+          });
+          if (currentEvent.id !== eventId) return;
+          tasks = result.tasks;
+          eventNotifications = result.notifications || eventNotifications;
+        } else {
+          const task = tasks.find(item => item.id === purchaseTaskId);
+          if (task) { task.purchased = true; task.done = true; }
+        }
+        saveCurrentEventData();
         persistAppState();
-      }
-      return;
+        renderAll();
+      } catch (error) { showToast(`Ticket guardado; no se pudo marcar la compra: ${error.message}`); }
     }
-    const attendeeToken = joinedInvitationTokens[currentEvent.inviteToken];
-    const accountAttendeeAccess = Boolean(authUser && currentViewerAttendeeId);
-    const headers = currentEvent.ownerToken
-      ? { 'X-Organizer-Token': currentEvent.ownerToken }
-      : (attendeeToken ? { 'X-Attendee-Token': attendeeToken } : {});
-    if (!currentEvent.ownerToken && !attendeeToken && !accountAttendeeAccess) {
-      showToast('El ticket se guardó, pero necesitas estar unido al evento para marcar la compra.');
-      return;
-    }
-    try {
-      const invitation = await requestApi(`/api/invitations/${encodeURIComponent(currentEvent.inviteToken)}/tasks/${encodeURIComponent(purchaseTaskId)}`, { method: 'PATCH', headers, body: JSON.stringify({ action: 'purchase' }) });
-      tasks = invitation.tasks;
-      eventNotifications = invitation.notifications || eventNotifications;
-      renderAll();
-      showToast('Compra registrada y marcada en la lista.');
-    } catch (error) {
-      showToast(`El ticket se guardó, pero no se pudo marcar la compra: ${error.message}`);
-    }
-  };
-
-  Promise.resolve(currentEvent.ownerToken ? syncRemoteEventState() : null).then(finishPurchase);
+  } catch (error) {
+    showToast(error.message);
+  } finally {
+    expenseSubmitting = false;
+    submit.disabled = false;
+  }
 });
 
 $('#expense-modal').addEventListener('close', () => {
@@ -2596,9 +2694,8 @@ async function loadInvitationFromLink() {
       notifications: cloneData(invitation.notifications || [])
     };
     currentEvent = remoteEvent;
-    currentViewerAttendeeId = invitation.viewerAttendeeId || (authUser
-      ? (invitation.attendees.find(person => person.name === authUser.name)?.id || '')
-      : (invitation.attendees.find(person => person.name.toLocaleLowerCase('es-ES') === (joinedInvitationNames[activeInviteToken] || '').toLocaleLowerCase('es-ES'))?.id || ''));
+    currentViewerAttendeeId = invitation.viewerAttendeeId || '';
+    currentEvent.viewerAttendeeId = currentViewerAttendeeId;
     communityLoadedToken = '';
     communityLoadedViewerKey = '';
     restoreEventData(remoteEvent.id);
@@ -2663,13 +2760,14 @@ $('#join-form').addEventListener('submit', async event => {
     });
     attendees = result.attendees;
     if (result.attendeeToken) joinedInvitationTokens[activeInviteToken] = result.attendeeToken;
-    currentViewerAttendeeId = attendees.find(person => person.name === name)?.id || '';
+    currentViewerAttendeeId = result.viewerAttendeeId || '';
     const joinedRemote = await requestApi(`/api/invitations/${encodeURIComponent(activeInviteToken)}`, { headers: { 'X-Attendee-Token': joinedInvitationTokens[activeInviteToken] } });
     tasks = joinedRemote.tasks || tasks;
     dateOptions = joinedRemote.dateOptions || dateOptions;
     expenses = joinedRemote.expenses || expenses;
     eventNotifications = joinedRemote.notifications || eventNotifications;
-    currentViewerAttendeeId = joinedRemote.viewerAttendeeId || currentViewerAttendeeId;
+    currentViewerAttendeeId = joinedRemote.viewerAttendeeId || '';
+    currentEvent.viewerAttendeeId = currentViewerAttendeeId;
     communityLoadedToken = '';
     communityLoadedViewerKey = '';
     joinedInvitationNames[activeInviteToken] = name;

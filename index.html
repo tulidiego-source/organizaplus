@@ -156,6 +156,7 @@
             <div class="expense-total-card"><span>GASTO TOTAL</span><strong id="expense-total-large">125,00 €</strong><small>Repartido entre <b id="split-count">12</b> personas</small></div>
             <div class="expense-total-card share-total"><span>POR PERSONA</span><strong id="per-person-total">10,42 €</strong><small>Al añadir un ticket, se actualiza al momento</small></div>
           </div>
+          <button class="secondary-button hidden" id="my-group-button" type="button" aria-haspopup="dialog" aria-controls="my-group-modal">Mi grupo</button>
           <div class="panel expense-panel"><div class="panel-heading"><div><span class="section-eyebrow">TICKETS</span><h2>Compras del grupo</h2></div></div><div id="expense-list"></div></div>
           <div class="panel balances-panel"><div class="panel-heading"><div><span class="section-eyebrow">REPARTO EQUITATIVO</span><h2>Balance por persona</h2></div></div><div id="balances-list"></div></div>
         </div>
@@ -293,6 +294,20 @@
       <label for="task-name">¿Qué hay que llevar?</label><input id="task-name" name="name" placeholder="Ej. Hielo" required maxlength="50">
       <div class="form-row"><div><label for="task-quantity">Cantidad</label><input id="task-quantity" name="quantity" placeholder="Ej. 2 bolsas" maxlength="30"></div><div><label for="task-person">¿Quién se encarga?</label><select id="task-person" name="person"></select></div></div>
       <button class="primary-button modal-submit" type="submit">Añadir a la lista <span>→</span></button>
+    </form>
+  </dialog>
+
+  <dialog class="app-modal my-group-modal" id="my-group-modal" aria-labelledby="my-group-title" aria-describedby="my-group-note">
+    <form class="modal-form" id="my-group-form">
+      <button class="modal-close" type="button" aria-label="Cerrar">×</button>
+      <h2 id="my-group-title">Mi grupo</h2>
+      <p id="my-group-summary"></p>
+      <p id="my-group-note">Reparto interno guardado solo en este dispositivo. No cambia el balance del evento ni envía notificaciones.</p>
+      <label for="my-group-mode">Reparto de la cuota familiar</label>
+      <select id="my-group-mode"><option value="equal">Igualitario entre todos</option><option value="adults">Niños cubiertos por los adultos</option><option value="custom">Personalizado</option></select>
+      <div id="my-group-members"></div>
+      <p id="my-group-feedback" role="status" aria-live="polite"></p>
+      <button class="primary-button" type="submit">Guardar reparto en este dispositivo</button>
     </form>
   </dialog>
 
