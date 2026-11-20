@@ -55,8 +55,17 @@ function publicAttendees(attendees) {
 
 function notificationViewerKey(record, request, attendeeOverride = null) {
   if (request && request.headers['x-organizer-token'] === record.ownerToken) return `organizer:${record.ownerToken}`;
-  const attendee = attendeeOverride || record.attendees.find(person => person.privateToken === request?.headers['x-attendee-token']);
+  const attendee = attendeeOverride || attendeeForRequest(record, request);
   return attendee ? `attendee:${attendee.id}` : '';
+}
+
+function attendeeForRequest(record, request) {
+  const attendeeToken = request?.headers?.['x-attendee-token'];
+  const authenticatedUser = request?.authenticatedUser;
+  return record.attendees.find(person => person.privateToken === attendeeToken)
+    || (authenticatedUser && record.attendees.find(person =>
+      person.accountUserId === authenticatedUser.id || person.email === authenticatedUser.email
+    ));
 }
 
 function unreadNotifications(notifications, viewerKey) {
@@ -75,9 +84,8 @@ function notificationsForViewer(record, viewerKey) {
 }
 
 function publicInvitation(record, request) {
-  const attendeeToken = request && request.headers['x-attendee-token'];
   const isOrganizer = request && request.headers['x-organizer-token'] && request.headers['x-organizer-token'] === record.ownerToken;
-  const viewer = record.attendees.find(person => person.privateToken === attendeeToken);
+  const viewer = attendeeForRequest(record, request);
   const viewerKey = notificationViewerKey(record, request, viewer);
   const notifications = (record.notifications || []).filter(notification =>
     (notification.audience === 'all' && !notification.recipientId)
@@ -540,7 +548,7 @@ function eventForAuthenticatedUser(record, request, user) {
 
   function getCommunityViewer(record, request) {
     const organizer = request.headers['x-organizer-token'] && request.headers['x-organizer-token'] === record.ownerToken;
-    const attendee = record.attendees.find(person => person.privateToken === request.headers['x-attendee-token']);
+    const attendee = attendeeForRequest(record, request);
     if (!organizer && (!attendee || !['Confirmado', 'Confirmada'].includes(attendee.status))) {
       throw new HttpError(403, 'Solo las personas confirmadas pueden acceder a esta sección.');
     }
@@ -569,6 +577,7 @@ function eventForAuthenticatedUser(record, request, user) {
   }
 
   async function handleApi(request, response, url) {
+    request.authenticatedUser = await getAuthenticatedUser(request);
     if (request.method === 'GET' && url.pathname === '/api/push/public-key') {
       sendJson(response, 200, { enabled: Boolean(webpush && vapidPublicKey && vapidPrivateKey), publicKey: vapidPublicKey || null });
       return;
@@ -1093,7 +1102,7 @@ function eventForAuthenticatedUser(record, request, user) {
       const body = await readJsonBody(request);
       const result = await mutateStore(() => {
         const record = records.find(item => item.token === taskProposalMatch[1]);
-        const attendee = record && record.attendees.find(person => person.privateToken === request.headers['x-attendee-token']);
+        const attendee = record && attendeeForRequest(record, request);
         if (!record) throw new HttpError(404, 'La invitación no existe o ha caducado.');
         if (!attendee) throw new HttpError(403, 'Solo un asistente puede proponer algo.');
         const task = normalizeTasks([{ name: body && body.name, quantity: body && body.quantity || '', person: '', done: false, proposalStatus: 'proposed', proposedBy: attendee.id }])[0];
@@ -1116,7 +1125,7 @@ function eventForAuthenticatedUser(record, request, user) {
         const task = record && record.tasks.find(item => item.id === taskUpdateMatch[2]);
         if (!record || !task) throw new HttpError(404, 'La tarea no existe.');
         const isOrganizer = request.headers['x-organizer-token'] === record.ownerToken;
-        const attendee = record.attendees.find(person => person.privateToken === request.headers['x-attendee-token']);
+        const attendee = attendeeForRequest(record, request);
         if (body && body.action === 'approve') {
           if (!isOrganizer) throw new HttpError(403, 'Solo el organizador puede aceptar propuestas.');
           task.proposalStatus = 'accepted';
