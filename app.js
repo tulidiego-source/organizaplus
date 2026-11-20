@@ -1041,13 +1041,15 @@ function renderTasks() {
     button.addEventListener('click', async () => {
       const task = tasks[Number(button.dataset.taskIndex)];
       const attendeeToken = joinedInvitationTokens[currentEvent.inviteToken];
+      const accountAttendeeAccess = Boolean(authUser && currentViewerAttendeeId);
       if (!currentEvent.ownerToken && task.id && !task.person) {
-        if (!attendeeToken) {
+        if (!attendeeToken && !accountAttendeeAccess) {
           showToast('Necesitas estar unido al evento para asignarte esta tarea.');
           return;
         }
         try {
-          const invitation = await requestApi(`/api/invitations/${encodeURIComponent(currentEvent.inviteToken)}/tasks/${encodeURIComponent(task.id)}`, { method: 'PATCH', headers: { 'X-Attendee-Token': attendeeToken }, body: JSON.stringify({ action: 'claim' }) });
+          const headers = attendeeToken ? { 'X-Attendee-Token': attendeeToken } : {};
+          const invitation = await requestApi(`/api/invitations/${encodeURIComponent(currentEvent.inviteToken)}/tasks/${encodeURIComponent(task.id)}`, { method: 'PATCH', headers, body: JSON.stringify({ action: 'claim' }) });
           tasks = invitation.tasks;
           eventNotifications = invitation.notifications || eventNotifications;
           renderAll();
@@ -1063,7 +1065,8 @@ function renderTasks() {
 
     const viewer = attendees.find(person => person.id === currentViewerAttendeeId);
     const attendeeToken = joinedInvitationTokens[currentEvent.inviteToken];
-    if (!currentEvent.ownerToken && !attendeeToken) {
+    const accountAttendeeAccess = Boolean(authUser && currentViewerAttendeeId);
+    if (!currentEvent.ownerToken && !attendeeToken && !accountAttendeeAccess) {
       showToast('Necesitas estar unido al evento para actualizar la compra.');
       return;
     }
@@ -1081,7 +1084,7 @@ function renderTasks() {
     try {
       const headers = currentEvent.ownerToken
         ? { 'X-Organizer-Token': currentEvent.ownerToken }
-        : { 'X-Attendee-Token': attendeeToken };
+        : (attendeeToken ? { 'X-Attendee-Token': attendeeToken } : {});
       const invitation = await requestApi(`/api/invitations/${encodeURIComponent(currentEvent.inviteToken)}/tasks/${encodeURIComponent(task.id)}`, { method: 'PATCH', headers, body: JSON.stringify({ action: 'purchase' }) });
       tasks = invitation.tasks;
       eventNotifications = invitation.notifications || eventNotifications;
@@ -2435,8 +2438,10 @@ $('#task-form').addEventListener('submit', event => {
   const person = form.get('person');
   const taskData = { name: form.get('name').trim(), quantity: form.get('quantity').trim(), person, done: false, purchased: false };
   const attendeeToken = joinedInvitationTokens[currentEvent.inviteToken];
-  if (!currentEvent.ownerToken && attendeeToken) {
-    requestApi(`/api/invitations/${encodeURIComponent(currentEvent.inviteToken)}/tasks/proposals`, { method: 'POST', headers: { 'X-Attendee-Token': attendeeToken }, body: JSON.stringify(taskData) })
+  const accountAttendeeAccess = Boolean(authUser && currentViewerAttendeeId);
+  if (!currentEvent.ownerToken && (attendeeToken || accountAttendeeAccess)) {
+    const headers = attendeeToken ? { 'X-Attendee-Token': attendeeToken } : {};
+    requestApi(`/api/invitations/${encodeURIComponent(currentEvent.inviteToken)}/tasks/proposals`, { method: 'POST', headers, body: JSON.stringify(taskData) })
       .then(invitation => { tasks = invitation.tasks; eventNotifications = invitation.notifications || eventNotifications; renderAll(); persistAppState(); formElement.reset(); $('#task-modal').close(); showToast('Propuesta enviada al organizador.'); })
       .catch(error => showToast(error.message));
     return;
@@ -2485,10 +2490,11 @@ $('#expense-form').addEventListener('submit', event => {
       return;
     }
     const attendeeToken = joinedInvitationTokens[currentEvent.inviteToken];
+    const accountAttendeeAccess = Boolean(authUser && currentViewerAttendeeId);
     const headers = currentEvent.ownerToken
       ? { 'X-Organizer-Token': currentEvent.ownerToken }
       : (attendeeToken ? { 'X-Attendee-Token': attendeeToken } : {});
-    if (!currentEvent.ownerToken && !attendeeToken) {
+    if (!currentEvent.ownerToken && !attendeeToken && !accountAttendeeAccess) {
       showToast('El ticket se guardó, pero necesitas estar unido al evento para marcar la compra.');
       return;
     }
