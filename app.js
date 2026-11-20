@@ -976,6 +976,10 @@ function personColor(name) {
   return person ? person.color : colors[name.length % colors.length];
 }
 
+function attendeeForName(name) {
+  return attendees.find(person => person.name === name) || null;
+}
+
 function initials(name) {
   return name.split(' ').map(part => part[0]).slice(0, 2).join('');
 }
@@ -986,8 +990,9 @@ function renderTaskRow(task, index, interactive = false) {
   const isMine = Boolean(task.person && ((task.personId && viewer?.id === task.personId) || (viewerName && task.person === viewerName)));
   const purchased = task.purchased === true || task.done === true;
   const canMarkPurchased = Boolean(currentEvent.ownerToken || isMine);
+  const taskPerson = task.person ? attendeeForName(task.person) : null;
   const owner = task.person
-    ? `<span class="mini-avatar" style="background:${personColor(task.person)}">${escapeHtml(initials(task.person))}</span>${escapeHtml(isMine ? 'Tú' : task.person)}`
+    ? `${taskPerson ? attendeeAvatarMarkup(taskPerson, attendees.indexOf(taskPerson), 'mini-avatar avatar') : `<span class="mini-avatar" style="background:${personColor(task.person)}">${escapeHtml(initials(task.person))}</span>`}${escapeHtml(isMine ? 'Tú' : task.person)}`
     : '<span class="mini-avatar unassigned">＋</span>Pendiente';
   const proposal = task.proposalStatus === 'proposed';
   const proposalAction = proposal && currentEvent.ownerToken ? `<button class="secondary-button task-accept-button" type="button" data-accept-task="${escapeHtml(task.id || '')}">Aceptar</button>` : (proposal ? '<small class="task-proposal-label">Propuesta pendiente</small>' : '');
@@ -1124,10 +1129,12 @@ function attendeeAvatarStyle(person, fallbackIndex = 0) {
   return person?.color ? `background:${escapeHtml(person.color)};` : '';
 }
 
-function attendeeAvatarMarkup(person, fallbackIndex = 0) {
-  const style = attendeeAvatarStyle(person, fallbackIndex);
+function attendeeAvatarMarkup(person, fallbackIndex = 0, className = 'avatar') {
+  const source = person?.avatar ? person : attendeeForName(person?.name) || person;
+  const resolvedFallbackIndex = fallbackIndex >= 0 ? fallbackIndex : Math.max(0, attendees.indexOf(source));
+  const style = attendeeAvatarStyle(source, resolvedFallbackIndex);
   const hasImage = style.includes('background-image:');
-  return `<span class="avatar"${style ? ` style="${style}"` : ''}>${hasImage ? '' : escapeHtml(person.initial || '')}</span>`;
+  return `<span class="${className}"${style ? ` style="${style}"` : ''}>${hasImage ? '' : escapeHtml(source.initial || '')}</span>`;
 }
 
 function renderAttendees() {
@@ -1240,7 +1247,7 @@ function renderExpenses() {
     .sort((a, b) => b.balance - a.balance);
   $('#balances-list').innerHTML = balances.map(person => `
     <div class="balance-entry">
-      <span class="mini-avatar" style="background:${person.color}">${person.initial}</span>
+      ${attendeeAvatarMarkup(person, attendees.indexOf(person), 'mini-avatar avatar')}
       <strong>${escapeHtml(person.name)}</strong>
       <span class="owes-note">${person.balance > 0 ? 'Ha adelantado' : 'Le corresponde'}</span>
       <span class="balance-amount ${person.balance < 0 ? 'owes' : ''}">${person.balance > 0 ? '+' : '−'}${euro(Math.abs(person.balance))}</span>

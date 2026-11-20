@@ -72,8 +72,10 @@ test('los asistentes muestran el avatar elegido en su perfil', () => {
   assert.match(appJs, /value === undefined \|\| value === null \|\| value === '' \? null : Number\(value\)/);
   assert.match(appJs, /spriteStyle\('\/avatars\.png', avatarIndex, 4, 3\)/);
   assert.match(appJs, /fallbackIndex % avatarImageCount/);
-  assert.match(appJs, /function attendeeAvatarMarkup\(person, fallbackIndex = 0\)/);
+  assert.match(appJs, /function attendeeAvatarMarkup\(person, fallbackIndex = 0, className = 'avatar'\)/);
   assert.match(appJs, /attendeeAvatarMarkup\(person(?:, fallbackIndex)?/);
+  assert.match(appJs, /attendeeAvatarMarkup\(taskPerson, attendees\.indexOf\(taskPerson\), 'mini-avatar avatar'\)/);
+  assert.match(appJs, /attendeeAvatarMarkup\(person, attendees\.indexOf\(person\), 'mini-avatar avatar'\)/);
 });
 
 test('el menú muestra nombres breves para chat y fotos', () => {
