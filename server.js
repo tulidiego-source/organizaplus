@@ -68,6 +68,13 @@ function attendeeForRequest(record, request) {
     ));
 }
 
+function markNotificationsReadForViewer(record, startIndex, viewerKey) {
+  if (!viewerKey) return;
+  record.notifications = (record.notifications || []).map((notification, index) => index < startIndex
+    ? notification
+    : { ...notification, readBy: Array.from(new Set([...(notification.readBy || []), viewerKey])) });
+}
+
 function unreadNotifications(notifications, viewerKey) {
   if (!viewerKey) return notifications.length;
   return notifications.filter(notification => !Array.isArray(notification.readBy) || !notification.readBy.includes(viewerKey)).length;
@@ -912,7 +919,7 @@ function eventForAuthenticatedUser(record, request, user) {
           record.chatMessages = normalizeChatMessages([...(record.chatMessages || []), message]).slice(-1000);
           pushNotification = {
             id: crypto.randomUUID(), audience: 'all', targetId: message.id, targetType: 'chat', title: 'Nuevo mensaje en el chat',
-            detail: `${authorName} ha escrito en el chat del evento.`, createdAt: new Date().toISOString(), readBy: []
+            detail: `${authorName} ha escrito en el chat del evento.`, createdAt: new Date().toISOString(), readBy: [authorId.startsWith('organizer:') ? authorId : `attendee:${authorId}`]
           };
           record.notifications = [...(record.notifications || []), pushNotification].slice(-50);
         } else {
@@ -923,7 +930,7 @@ function eventForAuthenticatedUser(record, request, user) {
           record.photos = normalizePhotos([...(record.photos || []), photo]).slice(-200);
           pushNotification = {
             id: crypto.randomUUID(), audience: 'all', targetId: photo.id, targetType: 'photo', title: 'Nueva foto del evento',
-            detail: `${authorName} ha compartido una foto con el grupo.`, createdAt: new Date().toISOString(), readBy: []
+            detail: `${authorName} ha compartido una foto con el grupo.`, createdAt: new Date().toISOString(), readBy: [authorId.startsWith('organizer:') ? authorId : `attendee:${authorId}`]
           };
           record.notifications = [...(record.notifications || []), pushNotification].slice(-50);
         }
@@ -1000,6 +1007,8 @@ function eventForAuthenticatedUser(record, request, user) {
           throw new HttpError(403, 'El organizador no permite añadir adultos o niños a este evento.');
         }
         const previousStatus = attendee.status;
+        const notificationStartIndex = (record.notifications || []).length;
+        const viewerKey = isOrganizer ? `organizer:${record.ownerToken}` : `attendee:${attendee.id}`;
         attendee.status = status;
         attendee.adults = adults;
         attendee.children = children;
@@ -1020,6 +1029,7 @@ function eventForAuthenticatedUser(record, request, user) {
             createdAt: new Date().toISOString()
           });
         }
+        markNotificationsReadForViewer(record, notificationStartIndex, viewerKey);
         return publicInvitation(record, request);
       });
       sendJson(response, 200, result);
@@ -1053,6 +1063,7 @@ function eventForAuthenticatedUser(record, request, user) {
         }
         const previousTasks = JSON.stringify(record.tasks);
         const previousTaskById = new Map(record.tasks.map(task => [task.id, task]));
+        const notificationStartIndex = (record.notifications || []).length;
         record.tasks = normalizeTasks(body && body.tasks);
         if (record.tasks.some(task => task.person && !record.attendees.some(person => ['Confirmado', 'Confirmada'].includes(person.status) && (person.id === task.personId || person.name === task.person)))) {
           throw new HttpError(400, 'Una tarea está asignada a una persona que no pertenece al evento.');
@@ -1091,6 +1102,7 @@ function eventForAuthenticatedUser(record, request, user) {
           }
           record.notifications = [...(record.notifications || []), ...taskNotifications].slice(-30);
         }
+        markNotificationsReadForViewer(record, notificationStartIndex, `organizer:${record.ownerToken}`);
          return publicInvitation(record, request);
       });
       sendJson(response, 200, result);
@@ -1126,6 +1138,7 @@ function eventForAuthenticatedUser(record, request, user) {
         if (!record || !task) throw new HttpError(404, 'La tarea no existe.');
         const isOrganizer = request.headers['x-organizer-token'] === record.ownerToken;
         const attendee = attendeeForRequest(record, request);
+        const notificationStartIndex = (record.notifications || []).length;
         if (body && body.action === 'approve') {
           if (!isOrganizer) throw new HttpError(403, 'Solo el organizador puede aceptar propuestas.');
           task.proposalStatus = 'accepted';
@@ -1155,6 +1168,7 @@ function eventForAuthenticatedUser(record, request, user) {
         } else {
           throw new HttpError(403, 'No tienes permiso para modificar esta tarea.');
         }
+        markNotificationsReadForViewer(record, notificationStartIndex, isOrganizer ? `organizer:${record.ownerToken}` : `attendee:${attendee.id}`);
         return publicInvitation(record, request);
       });
       sendJson(response, 200, result);
@@ -1194,6 +1208,7 @@ function eventForAuthenticatedUser(record, request, user) {
           throw new HttpError(409, 'El evento ha alcanzado el aforo máximo.');
         }
         const previousHeadcount = currentHeadcount;
+        const notificationStartIndex = (record.notifications || []).length;
         if (existing) {
           existing.status = 'Confirmado';
           existing.role = 'Participante';
@@ -1234,6 +1249,8 @@ function eventForAuthenticatedUser(record, request, user) {
           const message = messages[Math.floor(Math.random() * messages.length)].replace('X', String(nextHeadcount));
           record.notifications.push({ id: crypto.randomUUID(), audience: 'all', title: '¡El grupo crece!', detail: message, createdAt: new Date().toISOString() });
         }
+        const joinedAttendee = existing || record.attendees.at(-1);
+        markNotificationsReadForViewer(record, notificationStartIndex, `attendee:${joinedAttendee.id}`);
         return { attendees: publicAttendees(record.attendees), attendeeToken: existing ? existing.privateToken : record.attendees.at(-1).privateToken };
       });
       sendJson(response, 200, result);
