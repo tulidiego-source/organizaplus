@@ -756,6 +756,19 @@ h1 { margin-bottom: 6px; color: #263a30; font-size: clamp(24px, 2.4vw, 31px); fo
 .chat-message { background: #eaf4fb; }
 .chat-message-heading strong, .chat-message p { color: #25465e; }
 .event-photo { border-color: #d4e1ec; background: #f7fbfe; }
+.balance-entry-copy { display: grid; min-width: 0; gap: 3px; }
+.balance-entry-copy small { overflow: hidden; color: #4b647a; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+.art-grill { border-color: #294b64; background: #3c6684; }
+.art-grill::before, .art-grill::after { background: #294b64; }
+.art-leaf { color: #2f8ac1; }
+.hero-image { background: #dceefa; }
+.hero-image.event-image-selected { background-color: #dceefa; }
+.hero-image::before, .hero-image::after { border-color: rgba(32,91,130,.16); }
+.hero-sticker { border-color: rgba(21,91,138,.2); color: #155b8a; }
+.hero-sticker span { color: #4b7c9d; }
+.kicker-dot, .green-dot { background: #2f8ac1; }
+.event-organizer { color: #155b8a; }
+.people-icon { background: #e4f1fa; color: #155b8a; }
 
 @media (min-width: 1450px) {
   .page-wrap { width: min(1190px, 100%); }

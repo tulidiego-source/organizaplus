@@ -1231,24 +1231,34 @@ function renderExpenses() {
     </div>`).join('');
 
   const totalCents = Math.round(total * 100);
+  const confirmedPeople = attendees.filter(person => person.status !== 'Pendiente' && person.status !== 'Cancelado');
   const baseShareCents = confirmed ? Math.floor(totalCents / confirmed) : 0;
-  const extraShareCents = confirmed ? totalCents % confirmed : 0;
+  let remainingExtraShareCents = confirmed ? totalCents % confirmed : 0;
   const paidByPerson = new Map();
   expenses.forEach(expense => {
     const paidCents = Math.round(expense.amount * 100);
     paidByPerson.set(expense.person, (paidByPerson.get(expense.person) || 0) + paidCents);
   });
-  const balances = attendees.filter(person => person.status !== 'Pendiente' && person.status !== 'Cancelado')
-    .map((person, index) => {
-      const personShareCents = baseShareCents + (index < extraShareCents ? 1 : 0);
-      return { ...person, balance: ((paidByPerson.get(person.name) || 0) - personShareCents) / 100 };
+  const balances = confirmedPeople
+    .map(person => {
+      const groupSize = attendeePeopleCount(person);
+      const groupExtraShareCents = Math.min(remainingExtraShareCents, groupSize);
+      const groupShareCents = baseShareCents * groupSize + groupExtraShareCents;
+      remainingExtraShareCents -= groupExtraShareCents;
+      return {
+        ...person,
+        groupSize,
+        groupShareCents,
+        groupShare: groupShareCents / 100,
+        balance: ((paidByPerson.get(person.name) || 0) - groupShareCents) / 100
+      };
     })
     .filter(person => Math.abs(person.balance) > 0.005)
     .sort((a, b) => b.balance - a.balance);
   $('#balances-list').innerHTML = balances.map(person => `
     <div class="balance-entry">
       ${attendeeAvatarMarkup(person, attendees.indexOf(person), 'mini-avatar avatar')}
-      <strong>${escapeHtml(person.name)}</strong>
+      <span class="balance-entry-copy"><strong>${escapeHtml(person.name)}</strong><small>${person.groupSize} ${person.groupSize === 1 ? 'persona' : 'personas'} · ${person.adults || 0} ${(person.adults || 0) === 1 ? 'adulto' : 'adultos'}${person.children ? ` · ${person.children} ${person.children === 1 ? 'niño' : 'niños'}` : ''} · Grupo: ${euro(person.groupShare)}</small></span>
       <span class="owes-note">${person.balance > 0 ? 'Ha adelantado' : 'Le corresponde'}</span>
       <span class="balance-amount ${person.balance < 0 ? 'owes' : ''}">${person.balance > 0 ? '+' : '−'}${euro(Math.abs(person.balance))}</span>
     </div>`).join('') || '<p class="panel-subtitle">Todavía no hay cuentas que repartir.</p>';
@@ -1444,7 +1454,7 @@ function unreadSectionNotifications(tab) {
 }
 
 function viewSectionChanges(tab) {
-  if (!['attendees', 'tasks'].includes(tab)) return;
+  if (!['attendees', 'tasks', 'expenses', 'chat', 'photos'].includes(tab)) return;
   const unread = unreadSectionNotifications(tab);
   if (unread.length) {
     window.requestAnimationFrame(() => {
@@ -1470,13 +1480,19 @@ function highlightNotificationTarget(notification, tab, options = {}) {
       : tasks.find(item => text.includes(item.name.toLocaleLowerCase('es-ES')));
     if (task) elements = $$(`[data-task-id="${String(task.id).replace(/(["\\])/g, '\\$1')}"]`);
   } else if (tab === 'expenses') {
-    const expense = expenses.find(item => text.includes(item.name.toLocaleLowerCase('es-ES')));
+    const expense = notification.targetId
+      ? expenses.find(item => item.id === notification.targetId)
+      : expenses.find(item => text.includes(item.name.toLocaleLowerCase('es-ES')));
     if (expense) elements = $$(`[data-expense-id="${String(expense.id).replace(/(["\\])/g, '\\$1')}"]`);
   } else if (tab === 'chat') {
-    const message = communityMessages.slice().reverse().find(item => text.includes(item.authorName.toLocaleLowerCase('es-ES')));
+    const message = notification.targetId
+      ? communityMessages.find(item => item.id === notification.targetId)
+      : communityMessages.slice().reverse().find(item => text.includes(item.authorName.toLocaleLowerCase('es-ES')));
     if (message) elements = $$(`[data-message-id="${String(message.id).replace(/(["\\])/g, '\\$1')}"]`);
   } else if (tab === 'photos') {
-    const photo = eventPhotos.slice().reverse().find(item => text.includes(item.authorName.toLocaleLowerCase('es-ES')));
+    const photo = notification.targetId
+      ? eventPhotos.find(item => item.id === notification.targetId)
+      : eventPhotos.slice().reverse().find(item => text.includes(item.authorName.toLocaleLowerCase('es-ES')));
     if (photo) elements = $$(`[data-photo-id="${String(photo.id).replace(/(["\\])/g, '\\$1')}"]`);
   }
   if (!elements.length) {
@@ -1522,9 +1538,9 @@ function setTab(tab, options = {}) {
   $$('.sidebar .nav-link[data-tab]').forEach(button => button.classList.toggle('active', button.dataset.tab === currentTab));
   if (['chat', 'photos'].includes(currentTab)) loadCommunity();
   if (options.highlight) highlightNotificationTarget(options.notification, currentTab);
-  if (['attendees', 'tasks'].includes(currentTab)) {
+  if (['attendees', 'tasks', 'expenses', 'chat', 'photos'].includes(currentTab)) {
     viewSectionChanges(currentTab);
-    markSectionViewed(currentTab);
+    if (['attendees', 'tasks'].includes(currentTab)) markSectionViewed(currentTab);
     renderNotifications();
   }
   window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -1601,6 +1617,7 @@ async function loadCommunity(force = false) {
     communityLoadedToken = currentEvent.inviteToken;
     communityLoadedViewerKey = viewerKey;
     renderCommunity();
+    viewSectionChanges(currentTab);
     renderNotifications();
   } catch (error) {
     if (currentTab === 'chat' || currentTab === 'photos') showToast(error.message);
