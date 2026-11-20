@@ -1,4 +1,4 @@
-const CACHE_NAME = 'organizat-shell-v3';
+const CACHE_NAME = 'organizat-shell-v4';
 const SHELL = ['/', '/index.html', '/app.js', '/styles.css', '/manifest.webmanifest', '/icon.svg'];
 
 self.addEventListener('install', event => {

@@ -369,7 +369,7 @@ button { color: inherit; cursor: pointer; }
   margin: 0 -2px 16px;
   padding: 2px 2px 7px;
   scrollbar-width: thin;
-  scrollbar-color: #cbd8cc transparent;
+  scrollbar-color: #86b9d9 #eaf4fb;
 }
 .event-gallery-card {
   display: flex;
@@ -384,10 +384,10 @@ button { color: inherit; cursor: pointer; }
   text-align: left;
   transition: border-color .18s, background .18s, box-shadow .18s;
 }
-.event-gallery-card:hover { border-color: #c7dacc; box-shadow: 0 4px 12px rgba(35,53,44,.05); }
-.event-gallery-card.active { border-color: #c7dacc; background: #f2f8f1; }
-.event-card-indicator { display: grid; flex: 0 0 auto; place-items: center; width: 27px; height: 27px; border-radius: 8px; background: #edf4ec; color: #72966f; font-size: 15px; font-weight: 800; }
-.event-gallery-card:not(.active) .event-card-indicator { background: #f3f5f1; color: #9aa59c; }
+.event-gallery-card:hover { border-color: #86b9d9; box-shadow: 0 4px 12px rgba(21,91,138,.05); }
+.event-gallery-card.active { border-color: #86b9d9; background: #eaf4fb; }
+.event-card-indicator { display: grid; flex: 0 0 auto; place-items: center; width: 27px; height: 27px; border-radius: 8px; background: #dceefa; color: #155b8a; font-size: 15px; font-weight: 800; }
+.event-gallery-card:not(.active) .event-card-indicator { background: #e4f1fa; color: #41647f; }
 .event-card-copy { display: grid; min-width: 0; gap: 3px; }
 .event-card-copy h3 { overflow: hidden; margin: 0; color: #2f4238; font-size: 12px; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
 .event-card-copy small { overflow: hidden; color: #87938b; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
@@ -441,7 +441,7 @@ h1 { margin-bottom: 6px; color: #263a30; font-size: clamp(24px, 2.4vw, 31px); fo
 .attendee-summary span { padding: 0 2px; }
 .confirm-button { display: flex; align-items: center; gap: 7px; margin-left: auto; padding: 9px 12px; border: 0; border-radius: 6px; background: var(--green); color: white; font-size: 10px; font-weight: 700; transition: background .18s; }
 .confirm-button:hover { background: #1b4933; }
-.confirm-button.confirmed { background: #e8f2e9; color: var(--green); }
+.confirm-button.confirmed { background: #e2f2fc; color: #155b8a; }
 
 .event-status { margin-top: 28px; }
 .status-heading, .panel-heading { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; }
@@ -837,7 +837,7 @@ h1 { margin-bottom: 6px; color: #263a30; font-size: clamp(24px, 2.4vw, 31px); fo
   .event-nav::-webkit-scrollbar { display: none; }
   .nav-link, .nav-link:hover, .nav-link.active { display: flex; flex: 0 0 58px; flex-direction: column; align-items: center; justify-content: center; gap: 3px; min-width: 0; padding: 5px 2px; border-radius: 8px; font-size: 8px !important; line-height: 1.1; text-align: center; }
   .main-nav .nav-link { flex: 1; }
-  .nav-link.active { background: #eef4ed; }
+  .nav-link.active { background: #dceefa; }
   .nav-icon { width: auto; font-size: 18px; }
   .nav-count, .notification-dot { display: none; }
   .main-content { margin-left: 0; padding-bottom: 70px; }
