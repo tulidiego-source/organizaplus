@@ -123,6 +123,14 @@ body { background: var(--canvas); color: var(--ink); }
 .event-card-copy small, .meta-item small, .status-note, .task-main small, .attendee-list-name small { color: #4d687e; }
 .status-card { border-color: #d4e1ec; }
 .people-icon { background: #e4f1fa; color: #155b8a; }
+.event-gallery { scrollbar-color: #86b9d9 #eaf4fb; }
+.event-gallery-card { border-color: #cfe2f0; background: #f7fbfe; }
+.event-gallery-card:hover, .event-gallery-card.active { border-color: #86b9d9; background: #eaf4fb; }
+.event-card-indicator, .event-gallery-card:not(.active) .event-card-indicator { background: #dceefa; color: #155b8a; }
+.confirm-button.confirmed { border-color: #b8d5e8; background: #e2f2fc; color: #155b8a; }
+.status-card { border-color: #d4e1ec; background: #f7fbfe; }
+.status-card:nth-child(2) { background: #fffaf0; border-color: #ead9a7; }
+.status-card:nth-child(3) { background: #f2f8fd; border-color: #cfe2f0; }
 .list-icon { background: #fff3d9; color: #a96b10; }
 .money-icon { background: #e9f0fb; color: #416da2; }
 .green-dot { background: #2f8ac1; }
@@ -192,6 +200,13 @@ button, .nav-link, .icon-button, .task-purchased, .task-check, .attendee-delete-
 .expense-symbol { background: #fff2d8; color: #a96b10; }
 .expense-total-card span, .expense-total-card small, .expense-entry-copy small, .balance-entry .owes-note { color: #4b647a; }
 .share-total { background: #edf5fb; }
+.event-gallery::-webkit-scrollbar { height: 8px; }
+.event-gallery::-webkit-scrollbar-track { background: #eaf4fb; border-radius: 8px; }
+.event-gallery::-webkit-scrollbar-thumb { background: #86b9d9; border: 2px solid #eaf4fb; border-radius: 8px; }
+@media (max-width: 560px) {
+  .sidebar { border-top-color: #cfe2f0; background: #eaf4fb; }
+  .nav-link.active { background: #dceefa; color: #155b8a; }
+}
 .section-notification-dot { background: #2f8ac1; }
 .event-label { margin-top: 28px; }
 .sidebar-create-button { border-color: #bfd5e5; background: #edf7fd; color: #155b8a; }

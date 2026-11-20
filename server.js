@@ -72,7 +72,7 @@ function markNotificationsReadForViewer(record, startIndex, viewerKey) {
   if (!viewerKey) return;
   record.notifications = (record.notifications || []).map((notification, index) => index < startIndex
     ? notification
-    : { ...notification, readBy: Array.from(new Set([...(notification.readBy || []), viewerKey])) });
+    : { ...notification, actorViewerKey: viewerKey, readBy: Array.from(new Set([...(notification.readBy || []), viewerKey])) });
 }
 
 function unreadNotifications(notifications, viewerKey) {
@@ -87,7 +87,7 @@ function notificationsForViewer(record, viewerKey) {
     (notification.audience === 'all' && !notification.recipientId)
     || (organizer && notification.audience === 'organizer')
     || (attendeeId && notification.recipientId === attendeeId)
-  );
+  ).map(({ actorViewerKey, ...notification }) => notification);
 }
 
 function publicInvitation(record, request) {
@@ -98,7 +98,7 @@ function publicInvitation(record, request) {
     (notification.audience === 'all' && !notification.recipientId)
     || (isOrganizer && notification.audience === 'organizer')
     || (viewer && notification.recipientId === viewer.id)
-  );
+  ).map(({ actorViewerKey, ...notification }) => notification);
   return {
     event: record.event,
     attendees: publicAttendees(record.attendees),
@@ -564,7 +564,24 @@ function eventForAuthenticatedUser(record, request, user) {
 
   async function sendPushForEvent(eventToken, notification) {
     if (!pool || !webpush || !vapidPublicKey || !vapidPrivateKey || !notification) return;
-    const subscriptions = await pool.query('SELECT id, endpoint, p256dh, auth FROM push_subscriptions WHERE event_token = $1', [eventToken]);
+    const conditions = ['event_token = $1'];
+    const values = [eventToken];
+    if (notification.recipientId) {
+      values.push(`attendee:${notification.recipientId}`);
+      conditions.push(`viewer_key = $${values.length}`);
+    } else if (notification.audience === 'organizer') {
+      values.push('organizer:%');
+      conditions.push(`viewer_key LIKE $${values.length}`);
+    }
+    if (notification.actorViewerKey) {
+      values.push(notification.actorViewerKey);
+      conditions.push(`viewer_key <> $${values.length}`);
+    }
+    const subscriptionQuery = {
+      text: `SELECT id, endpoint, p256dh, auth FROM push_subscriptions WHERE ${conditions.join(' AND ')}`,
+      values
+    };
+    const subscriptions = await pool.query(subscriptionQuery);
     const payload = JSON.stringify({
       title: notification.title || 'Novedad en OrganizaT',
       body: notification.detail || 'Tienes una novedad en tu evento.',
@@ -919,7 +936,7 @@ function eventForAuthenticatedUser(record, request, user) {
           record.chatMessages = normalizeChatMessages([...(record.chatMessages || []), message]).slice(-1000);
           pushNotification = {
             id: crypto.randomUUID(), audience: 'all', targetId: message.id, targetType: 'chat', title: 'Nuevo mensaje en el chat',
-            detail: `${authorName} ha escrito en el chat del evento.`, createdAt: new Date().toISOString(), readBy: [authorId.startsWith('organizer:') ? authorId : `attendee:${authorId}`]
+            detail: `${authorName} ha escrito en el chat del evento.`, createdAt: new Date().toISOString(), actorViewerKey: authorId.startsWith('organizer:') ? authorId : `attendee:${authorId}`, readBy: [authorId.startsWith('organizer:') ? authorId : `attendee:${authorId}`]
           };
           record.notifications = [...(record.notifications || []), pushNotification].slice(-50);
         } else {
@@ -930,7 +947,7 @@ function eventForAuthenticatedUser(record, request, user) {
           record.photos = normalizePhotos([...(record.photos || []), photo]).slice(-200);
           pushNotification = {
             id: crypto.randomUUID(), audience: 'all', targetId: photo.id, targetType: 'photo', title: 'Nueva foto del evento',
-            detail: `${authorName} ha compartido una foto con el grupo.`, createdAt: new Date().toISOString(), readBy: [authorId.startsWith('organizer:') ? authorId : `attendee:${authorId}`]
+            detail: `${authorName} ha compartido una foto con el grupo.`, createdAt: new Date().toISOString(), actorViewerKey: authorId.startsWith('organizer:') ? authorId : `attendee:${authorId}`, readBy: [authorId.startsWith('organizer:') ? authorId : `attendee:${authorId}`]
           };
           record.notifications = [...(record.notifications || []), pushNotification].slice(-50);
         }
