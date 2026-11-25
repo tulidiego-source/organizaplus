@@ -6,6 +6,7 @@ const fsSync = require('node:fs');
 const http = require('node:http');
 const https = require('node:https');
 const path = require('node:path');
+const { secureDatabaseTables } = require('./database-security');
 const {
   HttpError,
   Invitation,
@@ -507,6 +508,7 @@ function eventForAuthenticatedUser(record, request, user) {
           UNIQUE(event_token, viewer_key, endpoint)
         )
       `);
+      await secureDatabaseTables(pool);
       const result = await pool.query('SELECT id, client_event_id, owner_user_id, token, owner_token, event, attendees, tasks, date_options, expenses, chat_messages, photos, notifications, created_at FROM invitation_events ORDER BY created_at');
       records = result.rows.map(row => ({
         id: row.id,
@@ -678,7 +680,13 @@ function eventForAuthenticatedUser(record, request, user) {
   }
 
   async function handleApi(request, response, url) {
-    request.authenticatedUser = await getAuthenticatedUser(request);
+    await server.ready;
+    if (pool && startupDatabaseError && url.pathname !== '/api/health') {
+      throw new HttpError(503, 'La base de datos no está preparada. Revisa la conexión y la configuración de seguridad del servidor.');
+    }
+    if (url.pathname !== '/api/health') {
+      request.authenticatedUser = await getAuthenticatedUser(request);
+    }
     if (request.method === 'GET' && url.pathname === '/api/push/public-key') {
       sendJson(response, 200, { enabled: Boolean(webpush && vapidPublicKey && vapidPrivateKey), publicKey: vapidPublicKey || null });
       return;
@@ -694,7 +702,7 @@ function eventForAuthenticatedUser(record, request, user) {
           ok: false,
           database: 'postgresql',
           authentication: true,
-          error: 'No se pudo conectar con la base de datos configurada.'
+          error: 'No se pudo inicializar la base de datos o su configuración de seguridad.'
         });
         return;
       }

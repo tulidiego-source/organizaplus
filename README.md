@@ -46,6 +46,21 @@ $env:HOST = "0.0.0.0"
 npm start
 ```
 
+### Seguridad de las tablas PostgreSQL (RLS)
+
+La aplicación accede a PostgreSQL únicamente desde el servidor de Node mediante `DATABASE_URL`; no utiliza PostgREST para consultar tablas desde el navegador. En cada arranque, después de crear las tablas, aplica de forma transaccional e idempotente [sql/enable-rls.sql](./sql/enable-rls.sql): activa RLS en las cinco tablas internas y revoca su acceso directo para `PUBLIC`, `anon` y `authenticated`. No crea políticas que permitan leer sesiones, contraseñas o eventos desde la API pública.
+
+La conexión de Node debe ser propietaria de estas tablas o disponer de `BYPASSRLS` (como la conexión administrativa de Supabase). No configures `DATABASE_URL` con un rol público de PostgREST. Si falla la configuración, `/api/health` devuelve 503 y la API permanece bloqueada; la aplicación no continúa en un estado inseguro.
+
+Para proteger una base ya desplegada sin esperar al siguiente reinicio, ejecuta el archivo SQL completo en el SQL Editor de tu proyecto Supabase como propietario/administrador. Este paso modifica solo las tablas de OrganizaT. Después comprueba que `rowsecurity` es `true` en las cinco tablas y vuelve a ejecutar Security Advisor:
+
+```sql
+SELECT tablename, rowsecurity
+FROM pg_tables
+WHERE schemaname = 'public'
+  AND tablename IN ('organizers', 'organizer_sessions', 'password_reset_codes', 'invitation_events', 'push_subscriptions');
+```
+
 ### Recuperación de contraseña
 
 La pantalla de inicio de sesión incluye «¿Has olvidado tu contraseña?». El servidor genera un código de 6 cifras válido durante 10 minutos, lo almacena de forma hasheada y lo envía mediante Resend. Para activarlo en producción configura `RESEND_API_KEY` y `EMAIL_FROM`; el dominio de `EMAIL_FROM` debe estar verificado en Resend.
